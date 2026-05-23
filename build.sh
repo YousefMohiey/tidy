@@ -15,8 +15,8 @@ echo "Building tidy $VERSION..."
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-linux-amd64" ./cmd/tidy/
 echo "  ✓ tidy-linux-amd64 (static)"
 
-GOOS=windows GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy.exe" ./cmd/tidy/
-echo "  ✓ tidy.exe"
+GOOS=windows GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-windows-amd64.exe" ./cmd/tidy/
+echo "  ✓ tidy-windows-amd64.exe"
 
 GOOS=darwin GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-macos-intel" ./cmd/tidy/
 echo "  ✓ tidy-macos-intel"
