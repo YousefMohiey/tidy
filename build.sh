@@ -12,8 +12,8 @@ mkdir -p "$OUTDIR"
 
 echo "Building tidy $VERSION..."
 
-GOOS=linux GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-linux-amd64" ./cmd/tidy/
-echo "  ✓ tidy-linux-amd64"
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-linux-amd64" ./cmd/tidy/
+echo "  ✓ tidy-linux-amd64 (static, works on all Linux including Alpine/NixOS)"
 
 GOOS=windows GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-windows-amd64.exe" ./cmd/tidy/
 echo "  ✓ tidy-windows-amd64.exe"
