@@ -369,6 +369,11 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		name := m.browseEntries[m.browseSelected]
+		if name == "." {
+			m.data.SourceDir = m.browsePath
+			m.browsingDir = false
+			return m, nil
+		}
 		if name == ".." {
 			m.browsePath = filepath.Dir(m.browsePath)
 			if m.browsePath == "." {
@@ -431,11 +436,13 @@ func loadBrowseEntries(path string) []string {
 		dirs = append(dirs, name)
 	}
 	sort.Strings(dirs)
+	result := []string{"."}
 	cleanPath := filepath.Clean(path)
 	if cleanPath != string(os.PathSeparator) {
-		return append([]string{".."}, dirs...)
+		result = append(result, "..")
 	}
-	return dirs
+	result = append(result, dirs...)
+	return result
 }
 
 func (m model) handleHomeKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
@@ -902,18 +909,28 @@ func (m model) homeLines(width int) []string {
 			name := m.browseEntries[i]
 			indicator := "  "
 			var styled string
+			displayName := name
+			if name == "." {
+				displayName = ". (select this folder)"
+			}
 			if i == m.browseSelected {
 				indicator = accentStyle.Render("> ")
-				if name == ".." {
-					styled = mutedStyle.Render(name)
-				} else {
-					styled = accentStyle.Render(name)
+				switch name {
+				case ".":
+					styled = accentStyle.Render(displayName)
+				case "..":
+					styled = mutedStyle.Render(displayName)
+				default:
+					styled = accentStyle.Render(displayName)
 				}
 			} else {
-				if name == ".." {
-					styled = mutedStyle.Render(name)
-				} else {
-					styled = valueStyle.Render(name)
+				switch name {
+				case ".":
+					styled = secondaryStyle.Render(displayName)
+				case "..":
+					styled = mutedStyle.Render(displayName)
+				default:
+					styled = valueStyle.Render(displayName)
 				}
 			}
 			entry := indicator + styled
@@ -1172,7 +1189,8 @@ func (m model) helpLines() []string {
 		"",
 		"  " + secondaryStyle.Render("Folder browser:"),
 		"    " + mutedStyle.Render("j/k or ↑/↓  ") + valueStyle.Render("Navigate directories"),
-		"    " + mutedStyle.Render("Enter       ") + valueStyle.Render("Enter selected directory"),
+		"    " + mutedStyle.Render("Enter on .  ") + valueStyle.Render("Select current folder as target"),
+		"    " + mutedStyle.Render("Enter on dir") + valueStyle.Render("Open that directory"),
 		"    " + mutedStyle.Render("Backspace   ") + valueStyle.Render("Go to parent directory"),
 		"    " + mutedStyle.Render("s           ") + valueStyle.Render("Select current directory"),
 		"    " + mutedStyle.Render("Home/End    ") + valueStyle.Render("Jump to first/last entry"),

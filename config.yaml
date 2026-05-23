@@ -11,6 +11,22 @@ rules:
       - webp
       - ico
       - tiff
+      - tif
+      - heic
+      - heif
+      - avif
+      - jxl
+      - raw
+      - cr2
+      - nef
+      - arw
+      - dng
+      - psd
+      - ai
+      - eps
+      - xcf
+      - tga
+      - indd
     magic_bytes:
       - image/jpeg
       - image/png
@@ -20,6 +36,17 @@ rules:
       - image/webp
       - image/x-icon
       - image/tiff
+      - image/heic
+      - image/heif
+      - image/avif
+      - image/jxl
+      - image/x-canon-cr2
+      - image/x-nikon-nef
+      - image/x-sony-arw
+      - image/x-adobe-dng
+      - image/vnd.adobe.photoshop
+      - image/x-xcf
+      - image/x-tga
     destination: Images
     patterns: []
 
@@ -38,6 +65,19 @@ rules:
       - ppt
       - pptx
       - csv
+      - tex
+      - pages
+      - numbers
+      - keynote
+      - wps
+      - vsd
+      - pub
+      - msg
+      - ods
+      - odp
+      - sxc
+      - sxi
+      - sxw
     magic_bytes:
       - application/pdf
       - application/msword
@@ -52,11 +92,18 @@ rules:
       - application/vnd.ms-powerpoint
       - application/vnd.openxmlformats-officedocument.presentationml.presentation
       - text/csv
+      - application/x-tex
+      - application/vnd.apple.pages
+      - application/vnd.apple.numbers
+      - application/vnd.apple.keynote
+      - application/vnd.oasis.opendocument.spreadsheet
+      - application/vnd.oasis.opendocument.presentation
     destination: Documents
     patterns:
       - "*.txt"
       - "*.md"
       - "*.csv"
+      - "*.tex"
 
   # ── Videos ──────────────────────────────────────────────────────────
   - name: Videos
@@ -68,6 +115,16 @@ rules:
       - wmv
       - flv
       - webm
+      - m4v
+      - mpg
+      - mpeg
+      - 3gp
+      - ts
+      - vob
+      - ogv
+      - rm
+      - asf
+      - divx
     magic_bytes:
       - video/mp4
       - video/x-msvideo
@@ -76,6 +133,13 @@ rules:
       - video/x-ms-wmv
       - video/x-flv
       - video/webm
+      - video/x-m4v
+      - video/mpeg
+      - video/3gpp
+      - video/mp2t
+      - video/x-ms-vob
+      - video/ogg
+      - application/vnd.rn-realmedia
     destination: Videos
     patterns: []
 
@@ -89,6 +153,13 @@ rules:
       - ogg
       - wma
       - m4a
+      - aiff
+      - ape
+      - opus
+      - mid
+      - midi
+      - amr
+      - weba
     magic_bytes:
       - audio/mpeg
       - audio/wav
@@ -98,6 +169,12 @@ rules:
       - audio/ogg
       - audio/x-ms-wma
       - audio/mp4
+      - audio/aiff
+      - audio/x-ape
+      - audio/opus
+      - audio/midi
+      - audio/amr
+      - audio/webm
     destination: Audio
     patterns: []
 
@@ -112,6 +189,20 @@ rules:
       - bz2
       - xz
       - zst
+      - cab
+      - jar
+      - war
+      - ear
+      - cpio
+      - lzh
+      - arj
+      - lz
+      - lzma
+      - lz4
+      - sz
+      - z
+      - dmg
+      - iso
     magic_bytes:
       - application/zip
       - application/x-tar
@@ -121,12 +212,20 @@ rules:
       - application/x-bzip2
       - application/x-xz
       - application/zstd
+      - application/vnd.ms-cab-compressed
+      - application/java-archive
+      - application/x-cpio
+      - application/x-apple-diskimage
+      - application/x-iso9660-image
     destination: Archives
     patterns:
       - "*.tar.gz"
       - "*.tar.bz2"
       - "*.tar.xz"
       - "*.tar.zst"
+      - "*.tar.lz"
+      - "*.tar.lzma"
+      - "*.tar.lz4"
 
   # ── Code ────────────────────────────────────────────────────────────
   - name: Code
@@ -153,6 +252,74 @@ rules:
       - yml
       - toml
       - xml
+      - lua
+      - pl
+      - r
+      - swift
+      - kt
+      - kts
+      - scala
+      - dart
+      - ex
+      - exs
+      - erl
+      - hs
+      - ml
+      - clj
+      - cljs
+      - lisp
+      - el
+      - pas
+      - vb
+      - bas
+      - bat
+      - ps1
+      - psd1
+      - psm1
+      - cmd
+      - sql
+      - asm
+      - s
+      - vim
+      - scss
+      - less
+      - sass
+      - vue
+      - svelte
+      - astro
+      - mdx
+      - graphql
+      - gql
+      - proto
+      - tf
+      - hcl
+      - ini
+      - cfg
+      - conf
+      - env
+      - properties
+      - dotenv
+      - dockerfile
+      - makefile
+      - cmake
+      - zig
+      - nim
+      - v
+      - jl
+      - f90
+      - f95
+      - f03
+      - cs
+      - fs
+      - fsx
+      - fsi
+      - m
+      - mm
+      - groovy
+      - gradle
+      - awk
+      - sed
+      - ipynb
     magic_bytes:
       - text/x-go
       - text/x-python
@@ -172,5 +339,144 @@ rules:
       - application/toml
       - text/xml
       - application/xml
+      - text/x-lua
+      - text/x-perl
+      - text/x-r
+      - text/x-swift
+      - text/x-kotlin
+      - text/x-scala
+      - text/x-dart
+      - text/x-erlang
+      - text/x-haskell
+      - text/x-ocaml
+      - text/x-clojure
+      - text/x-pascal
+      - text/x-sql
+      - text/x-asm
+      - text/x-scss
+      - text/x-less
+      - text/x-ini
     destination: Code
+    patterns: []
+
+  # ── Fonts ───────────────────────────────────────────────────────────
+  - name: Fonts
+    extensions:
+      - ttf
+      - otf
+      - woff
+      - woff2
+      - eot
+      - fon
+      - ttc
+    magic_bytes:
+      - font/ttf
+      - font/otf
+      - font/woff
+      - font/woff2
+      - application/x-font-ttf
+      - application/x-font-otf
+      - application/font-woff
+      - application/font-woff2
+      - application/vnd.ms-fontobject
+    destination: Fonts
+    patterns: []
+
+  # ── Executables ─────────────────────────────────────────────────────
+  - name: Executables
+    extensions:
+      - exe
+      - msi
+      - deb
+      - rpm
+      - apk
+      - appimage
+      - flatpak
+      - snap
+      - bin
+      - run
+    magic_bytes:
+      - application/x-executable
+      - application/x-msdos-program
+      - application/x-msi
+      - application/vnd.debian.binary-package
+      - application/x-rpm
+      - application/vnd.android.package-archive
+      - application/x-iso9660-appimage
+    destination: Executables
+    patterns: []
+
+  # ── Disk Images ─────────────────────────────────────────────────────
+  - name: "Disk Images"
+    extensions:
+      - iso
+      - img
+      - vmdk
+      - vdi
+      - vhd
+      - vhdx
+      - qcow2
+      - bin
+      - cue
+      - nrg
+      - mdf
+      - mds
+    magic_bytes:
+      - application/x-iso9660-image
+      - application/x-qemu-disk
+      - application/x-vmdk-disk
+      - application/x-virtualbox-vdi
+      - application/x-virtualbox-vhd
+    destination: "Disk Images"
+    patterns: []
+
+  # ── Ebooks ──────────────────────────────────────────────────────────
+  - name: Ebooks
+    extensions:
+      - epub
+      - mobi
+      - azw
+      - azw3
+      - djvu
+      - fb2
+      - lit
+      - lrf
+      - pdb
+    magic_bytes:
+      - application/epub+zip
+      - application/x-mobipocket-ebook
+      - application/vnd.amazon.ebook
+      - image/vnd.djvu
+      - application/x-fictionbook+xml
+    destination: Ebooks
+    patterns: []
+
+  # ── 3D Models ───────────────────────────────────────────────────────
+  - name: "3D Models"
+    extensions:
+      - stl
+      - obj
+      - fbx
+      - blend
+      - 3ds
+      - dae
+      - gltf
+      - glb
+      - ply
+      - wrl
+      - x3d
+      - iges
+      - igs
+      - step
+      - stp
+    magic_bytes:
+      - model/stl
+      - model/obj
+      - model/fbx
+      - application/x-blender
+      - model/gltf-binary
+      - model/gltf+json
+      - model/vrml
+      - model/x3d
+    destination: "3D Models"
     patterns: []
