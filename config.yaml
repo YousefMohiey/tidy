@@ -1,0 +1,176 @@
+rules:
+  # ── Images ──────────────────────────────────────────────────────────
+  - name: Images
+    extensions:
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - bmp
+      - svg
+      - webp
+      - ico
+      - tiff
+    magic_bytes:
+      - image/jpeg
+      - image/png
+      - image/gif
+      - image/bmp
+      - image/svg+xml
+      - image/webp
+      - image/x-icon
+      - image/tiff
+    destination: Images
+    patterns: []
+
+  # ── Documents ───────────────────────────────────────────────────────
+  - name: Documents
+    extensions:
+      - pdf
+      - doc
+      - docx
+      - txt
+      - md
+      - rtf
+      - odt
+      - xls
+      - xlsx
+      - ppt
+      - pptx
+      - csv
+    magic_bytes:
+      - application/pdf
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - text/plain
+      - text/markdown
+      - application/rtf
+      - text/rtf
+      - application/vnd.oasis.opendocument.text
+      - application/vnd.ms-excel
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-powerpoint
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - text/csv
+    destination: Documents
+    patterns:
+      - "*.txt"
+      - "*.md"
+      - "*.csv"
+
+  # ── Videos ──────────────────────────────────────────────────────────
+  - name: Videos
+    extensions:
+      - mp4
+      - avi
+      - mkv
+      - mov
+      - wmv
+      - flv
+      - webm
+    magic_bytes:
+      - video/mp4
+      - video/x-msvideo
+      - video/x-matroska
+      - video/quicktime
+      - video/x-ms-wmv
+      - video/x-flv
+      - video/webm
+    destination: Videos
+    patterns: []
+
+  # ── Audio ───────────────────────────────────────────────────────────
+  - name: Audio
+    extensions:
+      - mp3
+      - wav
+      - flac
+      - aac
+      - ogg
+      - wma
+      - m4a
+    magic_bytes:
+      - audio/mpeg
+      - audio/wav
+      - audio/x-wav
+      - audio/flac
+      - audio/aac
+      - audio/ogg
+      - audio/x-ms-wma
+      - audio/mp4
+    destination: Audio
+    patterns: []
+
+  # ── Archives ────────────────────────────────────────────────────────
+  - name: Archives
+    extensions:
+      - zip
+      - tar
+      - gz
+      - 7z
+      - rar
+      - bz2
+      - xz
+      - zst
+    magic_bytes:
+      - application/zip
+      - application/x-tar
+      - application/gzip
+      - application/x-7z-compressed
+      - application/vnd.rar
+      - application/x-bzip2
+      - application/x-xz
+      - application/zstd
+    destination: Archives
+    patterns:
+      - "*.tar.gz"
+      - "*.tar.bz2"
+      - "*.tar.xz"
+      - "*.tar.zst"
+
+  # ── Code ────────────────────────────────────────────────────────────
+  - name: Code
+    extensions:
+      - go
+      - py
+      - js
+      - ts
+      - jsx
+      - tsx
+      - rs
+      - c
+      - cpp
+      - h
+      - hpp
+      - java
+      - rb
+      - php
+      - sh
+      - css
+      - html
+      - json
+      - yaml
+      - yml
+      - toml
+      - xml
+    magic_bytes:
+      - text/x-go
+      - text/x-python
+      - application/javascript
+      - application/typescript
+      - text/x-rust
+      - text/x-c
+      - text/x-c++
+      - text/x-java
+      - application/x-ruby
+      - text/x-php
+      - application/x-sh
+      - text/css
+      - text/html
+      - application/json
+      - text/yaml
+      - application/toml
+      - text/xml
+      - application/xml
+    destination: Code
+    patterns: []
