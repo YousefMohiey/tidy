@@ -8,6 +8,7 @@ import (
 
 	"github.com/verhafter/tidy/internal/config"
 	"github.com/verhafter/tidy/internal/detector"
+	"github.com/verhafter/tidy/internal/paths"
 	"github.com/verhafter/tidy/internal/rules"
 )
 
@@ -36,12 +37,7 @@ type Organizer struct {
 // New creates an Organizer with the given configuration and options.
 func New(cfg *config.Config, opts Options) *Organizer {
 	if opts.JournalDir == "" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			opts.JournalDir = filepath.Join(home, ".local", "share", "tidy")
-		} else {
-			opts.JournalDir = ".local/share/tidy"
-		}
+		opts.JournalDir = paths.DataDir()
 	}
 
 	return &Organizer{

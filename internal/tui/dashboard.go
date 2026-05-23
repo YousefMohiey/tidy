@@ -15,6 +15,7 @@ import (
 	"github.com/verhafter/tidy/internal/config"
 	"github.com/verhafter/tidy/internal/dedup"
 	"github.com/verhafter/tidy/internal/organizer"
+	"github.com/verhafter/tidy/internal/paths"
 	"github.com/verhafter/tidy/internal/watcher"
 )
 
@@ -639,11 +640,7 @@ func (m model) toggleWatch() (tea.Model, tea.Cmd) {
 // ── Journal Helpers ─────────────────────────────────────────────────────────
 
 func journalPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "share", "tidy", "journal.json")
+	return paths.JournalPath()
 }
 
 func (m *model) reloadJournal() {

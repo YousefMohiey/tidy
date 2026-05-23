@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -14,6 +13,7 @@ import (
 	"github.com/verhafter/tidy/internal/config"
 	"github.com/verhafter/tidy/internal/dedup"
 	"github.com/verhafter/tidy/internal/organizer"
+	"github.com/verhafter/tidy/internal/paths"
 	"github.com/verhafter/tidy/internal/tui"
 	"github.com/verhafter/tidy/internal/watcher"
 )
@@ -253,7 +253,7 @@ func newUndoCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&journalPath, "journal", "", "path to journal file (default: ~/.local/share/tidy/journal.json)")
+	cmd.Flags().StringVar(&journalPath, "journal", "", "path to journal file (default: platform-specific data dir)")
 
 	return cmd
 }
@@ -294,7 +294,7 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&journalPath, "journal", "", "path to journal file (default: ~/.local/share/tidy/journal.json)")
+	cmd.Flags().StringVar(&journalPath, "journal", "", "path to journal file (default: platform-specific data dir)")
 
 	return cmd
 }
@@ -428,17 +428,11 @@ func loadConfig(path string) (*config.Config, error) {
 	return config.Default(), nil
 }
 
-// resolveJournalPath returns the journal file path, using the default
-// location (~/.local/share/tidy/journal.json) when none is specified.
+// resolveJournalPath returns the journal file path, using the platform-specific
+// default location when none is specified.
 func resolveJournalPath(path string) (string, error) {
 	if path != "" {
 		return path, nil
 	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("could not determine home directory: %w", err)
-	}
-
-	return filepath.Join(home, ".local", "share", "tidy", "journal.json"), nil
+	return paths.JournalPath(), nil
 }

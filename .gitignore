@@ -1,6 +1,7 @@
 # Binaries
 /tidy
 *.exe
+/dist/
 
 # Go
 vendor/
