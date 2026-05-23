@@ -13,16 +13,16 @@ mkdir -p "$OUTDIR"
 echo "Building tidy $VERSION..."
 
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-linux-amd64" ./cmd/tidy/
-echo "  ✓ tidy-linux-amd64 (static, works on all Linux including Alpine/NixOS)"
+echo "  ✓ tidy-linux-amd64 (static)"
 
-GOOS=windows GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-windows-amd64.exe" ./cmd/tidy/
-echo "  ✓ tidy-windows-amd64.exe"
+GOOS=windows GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy.exe" ./cmd/tidy/
+echo "  ✓ tidy.exe"
 
-GOOS=darwin GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-darwin-amd64" ./cmd/tidy/
-echo "  ✓ tidy-darwin-amd64"
+GOOS=darwin GOARCH=amd64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-macos-intel" ./cmd/tidy/
+echo "  ✓ tidy-macos-intel"
 
-GOOS=darwin GOARCH=arm64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-darwin-arm64" ./cmd/tidy/
-echo "  ✓ tidy-darwin-arm64"
+GOOS=darwin GOARCH=arm64 go build -buildvcs=false -ldflags="-s -w" -o "$OUTDIR/tidy-macos-apple-silicon" ./cmd/tidy/
+echo "  ✓ tidy-macos-apple-silicon"
 
 echo ""
 echo "All binaries built in $OUTDIR/"
