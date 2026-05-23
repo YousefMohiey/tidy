@@ -266,6 +266,7 @@ func newDedupCmd() *cobra.Command {
 	var (
 		launchDashboard bool
 		outputJSON      bool
+		configPath      string
 	)
 
 	cmd := &cobra.Command{
@@ -318,12 +319,17 @@ func newDedupCmd() *cobra.Command {
 			if launchDashboard {
 				fmt.Fprintln(os.Stdout)
 				fmt.Fprintf(os.Stdout, "%sLaunching dashboard...%s\n", colorGreen, colorReset)
+				cfg, cfgErr := loadConfig(configPath)
+				if cfgErr != nil {
+					cfg = config.Default()
+				}
 				jPath, _ := resolveJournalPath("")
 				journal, _ := organizer.LoadJournal(jPath)
 				data := tui.DashboardData{
 					Journal:   journal,
 					DedupScan: result,
 					SourceDir: args[0],
+					Config:    cfg,
 				}
 				return tui.Run(data)
 			}
@@ -334,6 +340,7 @@ func newDedupCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&launchDashboard, "dashboard", false, "launch TUI dashboard after scan")
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "output results as JSON")
+	cmd.Flags().StringVar(&configPath, "config", "", "path to YAML config file (for dashboard)")
 
 	return cmd
 }
@@ -352,7 +359,15 @@ func newDashboardCmd() *cobra.Command {
 		Long:  "Display an interactive terminal dashboard showing recent operations\nand duplicate file analysis.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data := tui.DashboardData{}
+			cfg, err := loadConfig("")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%swarning: using default config: %s%s\n", colorYellow, err, colorReset)
+				cfg = config.Default()
+			}
+
+			data := tui.DashboardData{
+				Config: cfg,
+			}
 
 			jPath, err := resolveJournalPath(journalPath)
 			if err == nil {
