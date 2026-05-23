@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -101,7 +102,7 @@ type watchEventMsg struct {
 
 type watchDoneMsg struct{}
 
-type cursorBlinkMsg struct{}
+
 
 // ── ActionResult ────────────────────────────────────────────────────────────
 
@@ -126,11 +127,12 @@ type model struct {
 	width     int
 	height    int
 
-	// Directory input
-	editingDir bool
-	dirInput   string
-	dirCursor  int
-	cursorOn   bool
+	// Folder browser
+	browsingDir    bool
+	browsePath     string
+	browseEntries  []string
+	browseSelected int
+	browseScroll   int
 
 	// Action menu (Home tab)
 	selectedAction int // 0=Organize, 1=Preview, 2=Dedup, 3=Undo, 4=Watch
@@ -162,15 +164,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, nil
-
-	case cursorBlinkMsg:
-		if m.editingDir {
-			m.cursorOn = !m.cursorOn
-			return m, tea.Tick(500*time.Millisecond, func(_ time.Time) tea.Msg {
-				return cursorBlinkMsg{}
-			})
-		}
 		return m, nil
 
 	case organizeResultMsg:
@@ -278,9 +271,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfirmKey(key)
 	}
 
-	// Directory editing mode
-	if m.editingDir {
-		return m.handleDirEditKey(msg, key)
+	if m.browsingDir {
+		return m.handleBrowseKey(key)
 	}
 
 	// Global keys
@@ -348,65 +340,102 @@ func (m model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) handleDirEditKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
+func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "enter":
-		path := strings.TrimSpace(m.dirInput)
-		if path != "" {
-			m.data.SourceDir = path
+	case "up", "k":
+		if m.browseSelected > 0 {
+			m.browseSelected--
 		}
-		m.editingDir = false
-		m.cursorOn = false
+		m.adjustBrowseScroll()
 		return m, nil
-	case "esc":
-		m.editingDir = false
-		m.cursorOn = false
+	case "down", "j":
+		if m.browseSelected < len(m.browseEntries)-1 {
+			m.browseSelected++
+		}
+		m.adjustBrowseScroll()
+		return m, nil
+	case "home":
+		m.browseSelected = 0
+		m.adjustBrowseScroll()
+		return m, nil
+	case "end":
+		if len(m.browseEntries) > 0 {
+			m.browseSelected = len(m.browseEntries) - 1
+		}
+		m.adjustBrowseScroll()
+		return m, nil
+	case "enter":
+		if len(m.browseEntries) == 0 {
+			return m, nil
+		}
+		name := m.browseEntries[m.browseSelected]
+		if name == ".." {
+			m.browsePath = filepath.Dir(m.browsePath)
+			if m.browsePath == "." {
+				m.browsePath = string(os.PathSeparator)
+			}
+		} else {
+			m.browsePath = filepath.Join(m.browsePath, name)
+		}
+		m.browseEntries = loadBrowseEntries(m.browsePath)
+		m.browseSelected = 0
+		m.browseScroll = 0
 		return m, nil
 	case "backspace":
-		if m.dirCursor > 0 {
-			runes := []rune(m.dirInput)
-			runes = append(runes[:m.dirCursor-1], runes[m.dirCursor:]...)
-			m.dirInput = string(runes)
-			m.dirCursor--
+		parent := filepath.Dir(m.browsePath)
+		if parent != m.browsePath {
+			m.browsePath = parent
+			if m.browsePath == "." {
+				m.browsePath = string(os.PathSeparator)
+			}
+			m.browseEntries = loadBrowseEntries(m.browsePath)
+			m.browseSelected = 0
+			m.browseScroll = 0
 		}
 		return m, nil
-	case "delete":
-		runes := []rune(m.dirInput)
-		if m.dirCursor < len(runes) {
-			runes = append(runes[:m.dirCursor], runes[m.dirCursor+1:]...)
-			m.dirInput = string(runes)
-		}
+	case "s", "ctrl+s":
+		m.data.SourceDir = m.browsePath
+		m.browsingDir = false
 		return m, nil
-	case "left":
-		if m.dirCursor > 0 {
-			m.dirCursor--
-		}
+	case "esc":
+		m.browsingDir = false
 		return m, nil
-	case "right":
-		if m.dirCursor < len([]rune(m.dirInput)) {
-			m.dirCursor++
-		}
-		return m, nil
-	case "home", "ctrl+a":
-		m.dirCursor = 0
-		return m, nil
-	case "end", "ctrl+e":
-		m.dirCursor = len([]rune(m.dirInput))
-		return m, nil
-	default:
-		// Insert printable characters
-		r := msg.Runes
-		if len(r) > 0 {
-			runes := []rune(m.dirInput)
-			newRunes := make([]rune, 0, len(runes)+len(r))
-			newRunes = append(newRunes, runes[:m.dirCursor]...)
-			newRunes = append(newRunes, r...)
-			newRunes = append(newRunes, runes[m.dirCursor:]...)
-			m.dirInput = string(newRunes)
-			m.dirCursor += len(r)
-		}
 	}
 	return m, nil
+}
+
+func (m *model) adjustBrowseScroll() {
+	const maxVisible = 10
+	if m.browseSelected < m.browseScroll {
+		m.browseScroll = m.browseSelected
+	}
+	if m.browseSelected >= m.browseScroll+maxVisible {
+		m.browseScroll = m.browseSelected - maxVisible + 1
+	}
+}
+
+func loadBrowseEntries(path string) []string {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		dirs = append(dirs, name)
+	}
+	sort.Strings(dirs)
+	cleanPath := filepath.Clean(path)
+	if cleanPath != string(os.PathSeparator) {
+		return append([]string{".."}, dirs...)
+	}
+	return dirs
 }
 
 func (m model) handleHomeKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
@@ -434,13 +463,25 @@ func (m model) handleHomeKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
 	case "w":
 		return m.executeAction(4)
 	case "e":
-		m.editingDir = true
-		m.dirInput = m.data.SourceDir
-		m.dirCursor = len([]rune(m.dirInput))
-		m.cursorOn = true
-		return m, tea.Tick(500*time.Millisecond, func(_ time.Time) tea.Msg {
-			return cursorBlinkMsg{}
-		})
+		m.browsingDir = true
+		startPath := m.data.SourceDir
+		if startPath == "" {
+			if home, err := os.UserHomeDir(); err == nil {
+				startPath = home
+			} else {
+				startPath = string(os.PathSeparator)
+			}
+		}
+		if strings.HasPrefix(startPath, "~") {
+			if home, err := os.UserHomeDir(); err == nil {
+				startPath = filepath.Join(home, startPath[1:])
+			}
+		}
+		m.browsePath = startPath
+		m.browseEntries = loadBrowseEntries(m.browsePath)
+		m.browseSelected = 0
+		m.browseScroll = 0
+		return m, nil
 	}
 	return m, nil
 }
@@ -743,9 +784,12 @@ func (m model) renderStatusBar(width int) string {
 // ── Footer ──────────────────────────────────────────────────────────────────
 
 func (m model) renderFooter() string {
-	if m.editingDir {
+	if m.browsingDir {
 		hints := []string{
-			mutedStyle.Render("enter") + valueStyle.Render(": confirm"),
+			mutedStyle.Render("j/k") + valueStyle.Render(": navigate"),
+			mutedStyle.Render("enter") + valueStyle.Render(": open"),
+			mutedStyle.Render("s") + valueStyle.Render(": select"),
+			mutedStyle.Render("backspace") + valueStyle.Render(": up"),
 			mutedStyle.Render("esc") + valueStyle.Render(": cancel"),
 		}
 		return "  " + strings.Join(hints, "  ")
@@ -765,7 +809,7 @@ func (m model) renderFooter() string {
 	case 0: // Home
 		hints = append(hints,
 			mutedStyle.Render("enter")+valueStyle.Render(": select"),
-			mutedStyle.Render("e")+valueStyle.Render(": edit dir"),
+			mutedStyle.Render("e")+valueStyle.Render(": browse dir"),
 		)
 	case 1: // Results
 		hints = append(hints, mutedStyle.Render("j/k")+valueStyle.Render(": scroll"))
@@ -800,7 +844,7 @@ func (m model) tabContent(width int) []string {
 func (m model) homeLines(width int) []string {
 	var lines []string
 
-	if m.data.SourceDir == "" && !m.editingDir {
+	if m.data.SourceDir == "" && !m.browsingDir {
 		lines = append(lines,
 			"",
 			"  "+titleStyle.Render("Welcome to tidy!"),
@@ -809,7 +853,7 @@ func (m model) homeLines(width int) []string {
 			"  "+valueStyle.Render("Before doing anything, it shows you a preview of what will happen."),
 			"",
 			"  "+accentStyle.Render("Getting started:"),
-			"    "+mutedStyle.Render("1.")+valueStyle.Render(" Press ")+accentStyle.Render("e")+valueStyle.Render(" to choose a directory (e.g. ~/Downloads)"),
+			"    "+mutedStyle.Render("1.")+valueStyle.Render(" Press ")+accentStyle.Render("e")+valueStyle.Render(" to browse and select a directory"),
 			"    "+mutedStyle.Render("2.")+valueStyle.Render(" Press ")+accentStyle.Render("p")+valueStyle.Render(" to preview what tidy would do (nothing moves)"),
 			"    "+mutedStyle.Render("3.")+valueStyle.Render(" Press ")+accentStyle.Render("o")+valueStyle.Render(" to organize when you're ready"),
 			"",
@@ -820,33 +864,91 @@ func (m model) homeLines(width int) []string {
 		return lines
 	}
 
+	if m.browsingDir {
+		lines = append(lines, "")
+		pathLine := "  " + labelStyle.Render("Browsing: ") + valueStyle.Render(m.browsePath)
+		hints := "  " + mutedStyle.Render("[s]")+valueStyle.Render("elect") + "  " + mutedStyle.Render("[esc]")+valueStyle.Render(" cancel")
+		avail := width - lipgloss.Width(pathLine) - lipgloss.Width(hints)
+		if avail < 1 {
+			avail = 1
+		}
+		lines = append(lines, pathLine+strings.Repeat(" ", avail)+hints)
+		lines = append(lines, "")
+
+		const maxVisible = 10
+		boxWidth := width - 4
+		if boxWidth < 30 {
+			boxWidth = 30
+		}
+		innerRuler := strings.Repeat("─", boxWidth-2)
+		lines = append(lines, "  "+borderStyle.Render("┌"+innerRuler+"┐"))
+
+		totalEntries := len(m.browseEntries)
+		end := m.browseScroll + maxVisible
+		if end > totalEntries {
+			end = totalEntries
+		}
+
+		if m.browseScroll > 0 {
+			upHint := mutedStyle.Render(fmt.Sprintf("  ▲ %d more above", m.browseScroll))
+			pad := boxWidth - 2 - lipgloss.Width(upHint)
+			if pad < 0 {
+				pad = 0
+			}
+			lines = append(lines, "  "+borderStyle.Render("│")+upHint+strings.Repeat(" ", pad)+borderStyle.Render("│"))
+		}
+
+		for i := m.browseScroll; i < end; i++ {
+			name := m.browseEntries[i]
+			indicator := "  "
+			var styled string
+			if i == m.browseSelected {
+				indicator = accentStyle.Render("> ")
+				if name == ".." {
+					styled = mutedStyle.Render(name)
+				} else {
+					styled = accentStyle.Render(name)
+				}
+			} else {
+				if name == ".." {
+					styled = mutedStyle.Render(name)
+				} else {
+					styled = valueStyle.Render(name)
+				}
+			}
+			entry := indicator + styled
+			contentW := lipgloss.Width(entry)
+			pad := boxWidth - 2 - contentW - 1
+			if pad < 0 {
+				pad = 0
+			}
+			lines = append(lines, "  "+borderStyle.Render("│")+" "+entry+strings.Repeat(" ", pad)+borderStyle.Render("│"))
+		}
+
+		if end < totalEntries {
+			downHint := mutedStyle.Render(fmt.Sprintf("  ▼ %d more below", totalEntries-end))
+			pad := boxWidth - 2 - lipgloss.Width(downHint)
+			if pad < 0 {
+				pad = 0
+			}
+			lines = append(lines, "  "+borderStyle.Render("│")+downHint+strings.Repeat(" ", pad)+borderStyle.Render("│"))
+		}
+
+		lines = append(lines, "  "+borderStyle.Render("└"+innerRuler+"┘"))
+		lines = append(lines, "")
+		lines = append(lines, m.renderActionMenu(width)...)
+		return lines
+	}
+
 	src := m.data.SourceDir
 	if src == "" {
 		src = "N/A"
 	}
 
-	if m.editingDir {
-		cursor := " "
-		if m.cursorOn {
-			cursor = "│"
-		}
-		runes := []rune(m.dirInput)
-		before := string(runes[:m.dirCursor])
-		after := ""
-		if m.dirCursor < len(runes) {
-			after = string(runes[m.dirCursor:])
-		}
-		inputField := fmt.Sprintf("[%s%s%s]", before, accentStyle.Render(cursor), after)
-		lines = append(lines,
-			"  "+labelStyle.Render("Directory: ")+inputField+"  "+mutedStyle.Render("[editing]"),
-		)
-	} else {
-		lines = append(lines,
-			"  "+labelStyle.Render("Directory: ")+valueStyle.Render(src)+"    "+mutedStyle.Render("[e]dit"),
-		)
-	}
+	lines = append(lines,
+		"  "+labelStyle.Render("Directory: ")+valueStyle.Render(src)+"    "+mutedStyle.Render("[e]dit"),
+	)
 
-	// Journal info
 	if m.data.Journal != nil {
 		j := m.data.Journal
 		lines = append(lines,
@@ -861,7 +963,6 @@ func (m model) homeLines(width int) []string {
 
 	lines = append(lines, "")
 
-	// Action menu
 	lines = append(lines, m.renderActionMenu(width)...)
 
 	return lines
@@ -1067,13 +1168,14 @@ func (m model) helpLines() []string {
 		"    " + mutedStyle.Render("d           ") + valueStyle.Render("Scan for duplicates"),
 		"    " + mutedStyle.Render("u           ") + valueStyle.Render("Undo last operation"),
 		"    " + mutedStyle.Render("w           ") + valueStyle.Render("Toggle watch mode"),
-		"    " + mutedStyle.Render("e           ") + valueStyle.Render("Edit source directory"),
+		"    " + mutedStyle.Render("e           ") + valueStyle.Render("Browse and select source directory"),
 		"",
-		"  " + secondaryStyle.Render("Directory editing:"),
-		"    " + mutedStyle.Render("Type path   ") + valueStyle.Render("Enter directory path"),
-		"    " + mutedStyle.Render("←/→        ") + valueStyle.Render("Move cursor"),
-		"    " + mutedStyle.Render("Backspace   ") + valueStyle.Render("Delete character"),
-		"    " + mutedStyle.Render("Enter       ") + valueStyle.Render("Confirm"),
+		"  " + secondaryStyle.Render("Folder browser:"),
+		"    " + mutedStyle.Render("j/k or ↑/↓  ") + valueStyle.Render("Navigate directories"),
+		"    " + mutedStyle.Render("Enter       ") + valueStyle.Render("Enter selected directory"),
+		"    " + mutedStyle.Render("Backspace   ") + valueStyle.Render("Go to parent directory"),
+		"    " + mutedStyle.Render("s           ") + valueStyle.Render("Select current directory"),
+		"    " + mutedStyle.Render("Home/End    ") + valueStyle.Render("Jump to first/last entry"),
 		"    " + mutedStyle.Render("Esc         ") + valueStyle.Render("Cancel"),
 		"",
 		"  " + secondaryStyle.Render("Results / Duplicates tabs:"),
