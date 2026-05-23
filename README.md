@@ -44,11 +44,17 @@ Grab the latest binary from [Releases](https://github.com/YousefMohiey/tidy/rele
 |---|---|
 | Linux (x86_64) | `tidy-linux-amd64` |
 | Windows (x86_64) | `tidy-windows-amd64.exe` |
+| macOS (Intel) | `tidy-darwin-amd64` |
+| macOS (Apple Silicon) | `tidy-darwin-arm64` |
 
 ```bash
 # Linux
 chmod +x tidy-linux-amd64
 sudo mv tidy-linux-amd64 /usr/local/bin/tidy
+
+# macOS (pick your architecture)
+chmod +x tidy-darwin-arm64
+sudo mv tidy-darwin-arm64 /usr/local/bin/tidy
 
 # Windows
 # Rename tidy-windows-amd64.exe to tidy.exe and put it in your PATH
@@ -264,10 +270,10 @@ go build -o tidy ./cmd/tidy/
 ./build.sh
 
 # Output in dist/
-#   tidy-linux-amd64
-#   tidy-windows-amd64.exe
-#   tidy-darwin-amd64
-#   tidy-darwin-arm64
+#   tidy-linux-amd64        (4.5 MB)
+#   tidy-windows-amd64.exe  (4.8 MB)
+#   tidy-darwin-amd64       (4.6 MB, Intel)
+#   tidy-darwin-arm64       (4.3 MB, Apple Silicon)
 ```
 
 ## License
