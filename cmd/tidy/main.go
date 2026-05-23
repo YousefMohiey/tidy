@@ -34,6 +34,7 @@ func main() {
 }
 
 // rootCmd builds and returns the root cobra command with all subcommands attached.
+// When invoked without a subcommand, launches the interactive dashboard directly.
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "tidy",
@@ -41,6 +42,9 @@ func rootCmd() *cobra.Command {
 		Long:  "tidy automatically organizes files into categorized directories\nbased on extension, MIME type, and filename patterns.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return launchDashboard("", "")
+		},
 	}
 
 	root.AddCommand(
@@ -53,6 +57,41 @@ func rootCmd() *cobra.Command {
 	)
 
 	return root
+}
+
+func launchDashboard(journalPath, scanDir string) error {
+	cfg, err := loadConfig("")
+	if err != nil {
+		cfg = config.Default()
+	}
+
+	data := tui.DashboardData{
+		Config: cfg,
+	}
+
+	jPath, err := resolveJournalPath(journalPath)
+	if err == nil {
+		journal, err := organizer.LoadJournal(jPath)
+		if err == nil {
+			data.Journal = journal
+			data.SourceDir = journal.SourceDir
+		}
+	}
+
+	if scanDir != "" {
+		scanner := dedup.NewScanner()
+		result, err := scanner.Scan(scanDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%swarning: dedup scan failed: %s%s\n", colorYellow, err, colorReset)
+		} else {
+			data.DedupScan = result
+			if data.SourceDir == "" {
+				data.SourceDir = scanDir
+			}
+		}
+	}
+
+	return tui.Run(data)
 }
 
 // --- organize command --------------------------------------------------------
@@ -359,39 +398,7 @@ func newDashboardCmd() *cobra.Command {
 		Long:  "Display an interactive terminal dashboard showing recent operations\nand duplicate file analysis.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfig("")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%swarning: using default config: %s%s\n", colorYellow, err, colorReset)
-				cfg = config.Default()
-			}
-
-			data := tui.DashboardData{
-				Config: cfg,
-			}
-
-			jPath, err := resolveJournalPath(journalPath)
-			if err == nil {
-				journal, err := organizer.LoadJournal(jPath)
-				if err == nil {
-					data.Journal = journal
-					data.SourceDir = journal.SourceDir
-				}
-			}
-
-			if scanDir != "" {
-				scanner := dedup.NewScanner()
-				result, err := scanner.Scan(scanDir)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "%swarning: dedup scan failed: %s%s\n", colorYellow, err, colorReset)
-				} else {
-					data.DedupScan = result
-					if data.SourceDir == "" {
-						data.SourceDir = scanDir
-					}
-				}
-			}
-
-			return tui.Run(data)
+			return launchDashboard(journalPath, scanDir)
 		},
 	}
 

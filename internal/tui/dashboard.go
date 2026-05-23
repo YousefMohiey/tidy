@@ -800,7 +800,26 @@ func (m model) tabContent(width int) []string {
 func (m model) homeLines(width int) []string {
 	var lines []string
 
-	// Directory line
+	if m.data.SourceDir == "" && !m.editingDir {
+		lines = append(lines,
+			"",
+			"  "+titleStyle.Render("Welcome to tidy!"),
+			"",
+			"  "+valueStyle.Render("tidy organizes your files into categorized folders automatically."),
+			"  "+valueStyle.Render("Before doing anything, it shows you a preview of what will happen."),
+			"",
+			"  "+accentStyle.Render("Getting started:"),
+			"    "+mutedStyle.Render("1.")+valueStyle.Render(" Press ")+accentStyle.Render("e")+valueStyle.Render(" to choose a directory (e.g. ~/Downloads)"),
+			"    "+mutedStyle.Render("2.")+valueStyle.Render(" Press ")+accentStyle.Render("p")+valueStyle.Render(" to preview what tidy would do (nothing moves)"),
+			"    "+mutedStyle.Render("3.")+valueStyle.Render(" Press ")+accentStyle.Render("o")+valueStyle.Render(" to organize when you're ready"),
+			"",
+			"  "+mutedStyle.Render("Everything is reversible — use ")+accentStyle.Render("u")+mutedStyle.Render(" to undo any time."),
+			"",
+		)
+		lines = append(lines, m.renderActionMenu(width)...)
+		return lines
+	}
+
 	src := m.data.SourceDir
 	if src == "" {
 		src = "N/A"
