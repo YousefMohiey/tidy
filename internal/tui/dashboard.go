@@ -250,12 +250,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusStyle = mutedStyle
 		return m, nil
 
-	case tea.PasteMsg:
-		if m.browsingDir && m.typingPath {
-			m.pathInput += string(msg)
-		}
-		return m, nil
-
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -455,8 +449,10 @@ func (m model) handlePathInputKey(key string) (tea.Model, tea.Cmd) {
 		m.pathInput = ""
 		return m, nil
 	default:
-		if len(key) == 1 {
-			m.pathInput += key
+		for _, r := range key {
+			if r >= 32 && r < 127 {
+				m.pathInput += string(r)
+			}
 		}
 		return m, nil
 	}
