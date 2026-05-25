@@ -188,12 +188,15 @@ func newWatchCmd() *cobra.Command {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			// Set up signal handling for graceful shutdown.
 			sigCh := make(chan os.Signal, 1)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			defer signal.Stop(sigCh)
 			go func() {
-				<-sigCh
-				cancel()
+				select {
+				case <-sigCh:
+					cancel()
+				case <-ctx.Done():
+				}
 			}()
 
 			w := watcher.New(dir, cfg, organizer.Options{})

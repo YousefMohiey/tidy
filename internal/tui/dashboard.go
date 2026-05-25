@@ -250,6 +250,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusStyle = mutedStyle
 		return m, nil
 
+	case tea.PasteMsg:
+		if m.browsingDir && m.typingPath {
+			m.pathInput += string(msg)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -983,7 +989,7 @@ func (m model) homeLines(width int) []string {
 			if name == "." {
 				displayName = ". (select this folder)"
 			} else if name == ".." {
-				displayName = ".. (back)"
+				displayName = "← .. (go back)"
 			} else if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
 				displayName = "[" + name + "]"
 			}
@@ -1002,7 +1008,7 @@ func (m model) homeLines(width int) []string {
 				case ".":
 					styled = secondaryStyle.Render(displayName)
 				case "..":
-					styled = mutedStyle.Render(displayName)
+					styled = accentStyle.Render(displayName)
 				default:
 					styled = valueStyle.Render(displayName)
 				}

@@ -59,6 +59,17 @@ func (j *Journal) Save(path string) error {
 	return nil
 }
 
+// Append loads an existing journal and appends the current operations to it,
+// then saves. If no journal exists, falls back to Save.
+func (j *Journal) Append(path string) error {
+	existing, err := LoadJournal(path)
+	if err == nil && existing != nil && existing.SourceDir == j.SourceDir {
+		existing.Operations = append(existing.Operations, j.Operations...)
+		return existing.Save(path)
+	}
+	return j.Save(path)
+}
+
 // LoadJournal reads a journal from a JSON file.
 func LoadJournal(path string) (*Journal, error) {
 	data, err := os.ReadFile(path)
