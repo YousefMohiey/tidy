@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -134,6 +135,8 @@ type model struct {
 	browseEntries  []string
 	browseSelected int
 	browseScroll   int
+	typingPath     bool
+	pathInput      string
 
 	// Action menu (Home tab)
 	selectedAction int // 0=Organize, 1=Preview, 2=Dedup, 3=Undo, 4=Watch
@@ -342,7 +345,14 @@ func (m model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
+	if m.typingPath {
+		return m.handlePathInputKey(key)
+	}
 	switch key {
+	case "g":
+		m.typingPath = true
+		m.pathInput = m.browsePath
+		return m, nil
 	case "up", "k":
 		if m.browseSelected > 0 {
 			m.browseSelected--
@@ -380,6 +390,9 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 			if m.browsePath == "." {
 				m.browsePath = string(os.PathSeparator)
 			}
+		} else if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
+			// Drive letter entry (e.g. "D:") — navigate to D:\
+			m.browsePath = name + string(os.PathSeparator)
 		} else {
 			m.browsePath = filepath.Join(m.browsePath, name)
 		}
@@ -410,6 +423,39 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) handlePathInputKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "enter":
+		cleanPath := filepath.Clean(strings.TrimSpace(m.pathInput))
+		if info, err := os.Stat(cleanPath); err == nil && info.IsDir() {
+			m.browsePath = cleanPath
+			m.browseEntries = loadBrowseEntries(m.browsePath)
+			m.browseSelected = 0
+			m.browseScroll = 0
+		}
+		m.typingPath = false
+		m.pathInput = ""
+		return m, nil
+	case "esc":
+		m.typingPath = false
+		m.pathInput = ""
+		return m, nil
+	case "backspace":
+		if len(m.pathInput) > 0 {
+			m.pathInput = m.pathInput[:len(m.pathInput)-1]
+		}
+		return m, nil
+	case "ctrl+u":
+		m.pathInput = ""
+		return m, nil
+	default:
+		if len(key) == 1 {
+			m.pathInput += key
+		}
+		return m, nil
+	}
+}
+
 func (m *model) adjustBrowseScroll() {
 	const maxVisible = 10
 	if m.browseSelected < m.browseScroll {
@@ -418,6 +464,22 @@ func (m *model) adjustBrowseScroll() {
 	if m.browseSelected >= m.browseScroll+maxVisible {
 		m.browseScroll = m.browseSelected - maxVisible + 1
 	}
+}
+
+// listWindowsDrives returns available drive letters on Windows (e.g. "C:", "D:").
+// On non-Windows systems it returns nil.
+func listWindowsDrives() []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	var drives []string
+	for l := 'A'; l <= 'Z'; l++ {
+		path := string(l) + ":\\"
+		if _, err := os.Stat(path); err == nil {
+			drives = append(drives, string(l)+":")
+		}
+	}
+	return drives
 }
 
 func loadBrowseEntries(path string) []string {
@@ -438,10 +500,18 @@ func loadBrowseEntries(path string) []string {
 	}
 	sort.Strings(dirs)
 	result := []string{"."}
+
 	cleanPath := filepath.Clean(path)
-	if cleanPath != string(os.PathSeparator) {
+	parent := filepath.Dir(cleanPath)
+	canGoUp := parent != cleanPath
+	if canGoUp {
 		result = append(result, "..")
+	} else if runtime.GOOS == "windows" {
+		// At filesystem root on Windows — show available drives instead of ".."
+		drives := listWindowsDrives()
+		result = append(result, drives...)
 	}
+
 	result = append(result, dirs...)
 	return result
 }
@@ -871,12 +941,15 @@ func (m model) homeLines(width int) []string {
 	if m.browsingDir {
 		lines = append(lines, "")
 		pathLine := "  " + labelStyle.Render("Browsing: ") + valueStyle.Render(m.browsePath)
-		hints := "  " + mutedStyle.Render("[s]")+valueStyle.Render("elect") + "  " + mutedStyle.Render("[esc]")+valueStyle.Render(" cancel")
+		hints := "  " + mutedStyle.Render("[s]")+valueStyle.Render("elect") + "  " + mutedStyle.Render("[g]")+valueStyle.Render("o to path") + "  " + mutedStyle.Render("[esc]")+valueStyle.Render(" cancel")
 		avail := width - lipgloss.Width(pathLine) - lipgloss.Width(hints)
 		if avail < 1 {
 			avail = 1
 		}
 		lines = append(lines, pathLine+strings.Repeat(" ", avail)+hints)
+		if m.typingPath {
+			lines = append(lines, "  "+accentStyle.Render("Go to: ")+valueStyle.Render(m.pathInput)+accentStyle.Render("█"))
+		}
 		lines = append(lines, "")
 
 		const maxVisible = 10
@@ -909,6 +982,10 @@ func (m model) homeLines(width int) []string {
 			displayName := name
 			if name == "." {
 				displayName = ". (select this folder)"
+			} else if name == ".." {
+				displayName = ".. (back)"
+			} else if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
+				displayName = "[" + name + "]"
 			}
 			if i == m.browseSelected {
 				indicator = accentStyle.Render("> ")
@@ -916,7 +993,7 @@ func (m model) homeLines(width int) []string {
 				case ".":
 					styled = accentStyle.Render(displayName)
 				case "..":
-					styled = mutedStyle.Render(displayName)
+					styled = accentStyle.Render(displayName)
 				default:
 					styled = accentStyle.Render(displayName)
 				}
@@ -1188,7 +1265,9 @@ func (m model) helpLines() []string {
 		"    " + mutedStyle.Render("j/k or ↑/↓  ") + valueStyle.Render("Navigate directories"),
 		"    " + mutedStyle.Render("Enter on .  ") + valueStyle.Render("Select current folder as target"),
 		"    " + mutedStyle.Render("Enter on dir") + valueStyle.Render("Open that directory"),
+		"    " + mutedStyle.Render("Enter [X:]  ") + valueStyle.Render("Navigate to a drive (Windows)"),
 		"    " + mutedStyle.Render("Backspace   ") + valueStyle.Render("Go to parent directory"),
+		"    " + mutedStyle.Render("g           ") + valueStyle.Render("Type or paste a path to navigate directly"),
 		"    " + mutedStyle.Render("s           ") + valueStyle.Render("Select current directory"),
 		"    " + mutedStyle.Render("Home/End    ") + valueStyle.Render("Jump to first/last entry"),
 		"    " + mutedStyle.Render("Esc         ") + valueStyle.Render("Cancel"),
