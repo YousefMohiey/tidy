@@ -743,6 +743,7 @@ func (m model) View() string {
 
 	// Layout: top-border(1) + header(1) + separator(1) + content(N) + status(1) + bottom-border(1)
 	// Footer is rendered inside the content area to ensure proper clearing
+	// Using -6 instead of -5 to leave 1 line of padding, preventing terminal scrollback from hiding the header
 	contentHeight := m.height - 6
 	if contentHeight < 1 {
 		contentHeight = 1

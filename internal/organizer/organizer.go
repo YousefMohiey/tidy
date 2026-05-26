@@ -74,6 +74,12 @@ func (o *Organizer) Organize(dir string) (*Result, error) {
 			continue
 		}
 
+		// Skip shortcuts (.lnk) — leave them on desktop/folders as-is
+		if strings.HasSuffix(strings.ToLower(name), ".lnk") {
+			result.FilesSkipped++
+			continue
+		}
+
 		// Skip directories (no recursion)
 		if entry.IsDir() {
 			result.FilesSkipped++
