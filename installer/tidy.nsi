@@ -28,8 +28,8 @@ InstallDir "$LOCALAPPDATA\Programs\tidy"
 InstallDirRegKey HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-ShowInstDetails show
-ShowUnInstDetails show
+ShowInstDetails nevershow
+ShowUnInstDetails nevershow
 
 ; --- ModernUI 2 configuration ---
 !define MUI_ABORTWARNING

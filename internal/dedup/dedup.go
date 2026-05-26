@@ -36,12 +36,19 @@ type Scanner struct {
 	// MinSize is the minimum file size to consider (skip empty files).
 	// Default: 1 byte.
 	MinSize int64
+	// MaxSize is the maximum file size to hash (skip very large files).
+	// Default: 1 GB (1073741824 bytes). Set to 0 to disable.
+	MaxSize int64
+	// MaxDepth limits how deep to recurse. 0 means unlimited.
+	MaxDepth int
 }
 
 // NewScanner creates a Scanner with default settings.
 func NewScanner() *Scanner {
 	return &Scanner{
 		MinSize: 1,
+		MaxSize: 1073741824, // 1 GB
+		MaxDepth: 0,
 	}
 }
 
@@ -97,12 +104,29 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 
 			name := d.Name()
 
-			// Skip hidden files and directories
+		// Skip hidden files and directories
 			if strings.HasPrefix(name, ".") {
 				if d.IsDir() {
 					return filepath.SkipDir
 				}
 				return nil
+			}
+
+			// Skip known system/cache directories
+			skipDirs := map[string]bool{
+				"node_modules": true,
+				".git":         true,
+				"__pycache__":  true,
+				"venv":         true,
+				".venv":        true,
+				"vendor":       true,
+				".cargo":       true,
+				"target":       true,
+				"obj":          true,
+				"bin":          true,
+			}
+			if d.IsDir() && skipDirs[strings.ToLower(name)] {
+				return filepath.SkipDir
 			}
 
 			// Skip symlinks
@@ -123,6 +147,11 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 
 			size := info.Size()
 			if size < minSize {
+				return nil
+			}
+
+			// Skip files larger than MaxSize (avoid hashing huge files)
+			if s.MaxSize > 0 && size > s.MaxSize {
 				return nil
 			}
 

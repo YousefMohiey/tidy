@@ -741,8 +741,9 @@ func (m model) View() string {
 		innerWidth = 40
 	}
 
-	// Layout: top-border(1) + header(1) + separator(1) + content(N) + status(1) + bottom-border(1) + footer(1)
-	contentHeight := m.height - 7
+	// Layout: top-border(1) + header(1) + separator(1) + content(N) + status(1) + bottom-border(1)
+	// Footer is rendered inside the content area to ensure proper clearing
+	contentHeight := m.height - 6
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -754,6 +755,10 @@ func (m model) View() string {
 	} else {
 		lines = m.tabContent(innerWidth)
 	}
+
+	// Append footer to content lines so it's part of the scrollable area
+	lines = append(lines, "")
+	lines = append(lines, m.renderFooter())
 
 	// Clamp scroll
 	maxScroll := len(lines) - contentHeight
@@ -779,6 +784,8 @@ func (m model) View() string {
 		idx := start + i
 		if idx < end {
 			visible[i] = lines[idx]
+		} else {
+			visible[i] = "" // Fill remaining lines with empty strings
 		}
 	}
 
@@ -813,9 +820,6 @@ func (m model) View() string {
 	// Bottom border
 	sb.WriteString(b.Render("╰" + ruler + "╯"))
 	sb.WriteByte('\n')
-
-	// Footer hints
-	sb.WriteString(m.renderFooter())
 
 	return sb.String()
 }
@@ -989,22 +993,22 @@ func (m model) homeLines(width int) []string {
 			} else if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
 				displayName = "[" + name + "]"
 			}
-			if i == m.browseSelected {
-				indicator = accentStyle.Render("> ")
-				switch name {
-				case ".":
-					styled = accentStyle.Render(displayName)
-				case "..":
-					styled = accentStyle.Render(displayName)
-				default:
-					styled = accentStyle.Render(displayName)
-				}
-			} else {
-				switch name {
-				case ".":
-					styled = secondaryStyle.Render(displayName)
-				case "..":
-					styled = accentStyle.Render(displayName)
+		if i == m.browseSelected {
+			indicator = accentStyle.Render("> ")
+			switch name {
+			case ".":
+				styled = accentStyle.Render(displayName)
+			case "..":
+				styled = mutedStyle.Render(displayName)
+			default:
+				styled = accentStyle.Render(displayName)
+			}
+		} else {
+			switch name {
+			case ".":
+				styled = secondaryStyle.Render(displayName)
+			case "..":
+				styled = mutedStyle.Render(displayName)
 				default:
 					styled = valueStyle.Render(displayName)
 				}
