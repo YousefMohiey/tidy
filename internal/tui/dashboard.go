@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -402,6 +403,12 @@ func (m model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 		if action == "undo" {
 			return m.runUndo()
 		}
+		if action == "install-context-menu" {
+			return m.installContextMenu()
+		}
+		if action == "remove-context-menu" {
+			return m.removeContextMenu()
+		}
 	case "n", "N", "esc":
 		m.confirming = false
 		m.confirmAction = ""
@@ -589,7 +596,7 @@ func (m model) handleHomeKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "down", "j":
-		if m.selectedAction < 4 {
+		if m.selectedAction < 5 {
 			m.selectedAction++
 		}
 		return m, nil
@@ -605,6 +612,8 @@ func (m model) handleHomeKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
 		return m.executeAction(3)
 	case "w":
 		return m.executeAction(4)
+	case "c":
+		return m.executeAction(5)
 	case "e":
 		m.browsingDir = true
 		startPath := m.data.SourceDir
@@ -653,6 +662,8 @@ func (m model) executeAction(action int) (tea.Model, tea.Cmd) {
 		return m.requestUndo()
 	case 4:
 		return m.toggleWatch()
+	case 5:
+		return m.toggleContextMenu()
 	}
 	return m, nil
 }
@@ -777,6 +788,89 @@ func (m model) toggleWatch() (tea.Model, tea.Cmd) {
 		_ = w.Watch(ctx)
 		return watchDoneMsg{}
 	}
+}
+
+func (m model) toggleContextMenu() (tea.Model, tea.Cmd) {
+	if runtime.GOOS != "windows" {
+		m.status = "Context menu is only available on Windows"
+		m.statusStyle = errorStyle
+		return m, nil
+	}
+
+	if m.contextMenuInstalled() {
+		m.confirming = true
+		m.confirmAction = "remove-context-menu"
+		m.confirmMsg = "Remove 'Organize with tidy' from right-click menu?"
+		return m, nil
+	}
+
+	m.confirming = true
+	m.confirmAction = "install-context-menu"
+	m.confirmMsg = "Add 'Organize with tidy' to right-click menu?"
+	return m, nil
+}
+
+func (m model) contextMenuInstalled() bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	cmd := exec.Command("reg", "query", "HKCU\\Software\\Classes\\Directory\\Background\\shell\\tidy")
+	err := cmd.Run()
+	return err == nil
+}
+
+func (m model) installContextMenu() (tea.Model, tea.Cmd) {
+	if runtime.GOOS != "windows" {
+		return m, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		m.status = "Error: " + err.Error()
+		m.statusStyle = errorStyle
+		return m, nil
+	}
+	exe = filepath.Clean(exe)
+	iconPath := filepath.Join(filepath.Dir(exe), "tidy.ico")
+
+	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy`, "", "Organize with tidy")
+	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy`, "Icon", iconPath)
+	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy\command`, "", `"`+exe+`" organize "%V"`)
+
+	_ = registryWriteString(`Software\Classes\Directory\shell\tidy`, "", "Organize with tidy")
+	_ = registryWriteString(`Software\Classes\Directory\shell\tidy`, "Icon", iconPath)
+	_ = registryWriteString(`Software\Classes\Directory\shell\tidy\command`, "", `"`+exe+`" organize "%1"`)
+
+	m.status = "Context menu installed"
+	m.statusStyle = successStyle
+	return m, nil
+}
+
+func (m model) removeContextMenu() (tea.Model, tea.Cmd) {
+	if runtime.GOOS != "windows" {
+		return m, nil
+	}
+	_ = registryDeleteKey(`Software\Classes\Directory\Background\shell\tidy`)
+	_ = registryDeleteKey(`Software\Classes\Directory\shell\tidy`)
+	m.status = "Context menu removed"
+	m.statusStyle = successStyle
+	return m, nil
+}
+
+func registryWriteString(path, name, value string) error {
+	args := []string{"add", "HKCU\\" + path, "/f"}
+	if name != "" {
+		args = append(args, "/v", name)
+	} else {
+		args = append(args, "/ve")
+	}
+	args = append(args, "/t", "REG_SZ", "/d", value)
+	cmd := exec.Command("reg", args...)
+	return cmd.Run()
+}
+
+func registryDeleteKey(path string) error {
+	cmd := exec.Command("reg", "delete", "HKCU\\"+path, "/f")
+	return cmd.Run()
 }
 
 func (m *model) reloadJournal() {
@@ -1165,6 +1259,7 @@ func (m model) renderActionMenu(width int) []string {
 		{"Scan for duplicates", "d"},
 		{"Undo last operation", "u"},
 		{"Toggle watch mode", "w"},
+		{"Toggle context menu", "c"},
 	}
 
 	var lines []string
@@ -1192,6 +1287,13 @@ func (m model) renderActionMenu(width int) []string {
 		extra := ""
 		if i == 4 && m.watching {
 			extra = " " + successStyle.Render("(active)")
+		}
+		if i == 5 && runtime.GOOS == "windows" {
+			if m.contextMenuInstalled() {
+				extra = " " + successStyle.Render("(installed)")
+			} else {
+				extra = " " + mutedStyle.Render("(not installed)")
+			}
 		}
 
 		content := indicator + labelText + extra
@@ -1396,6 +1498,7 @@ func (m model) helpLines() []string {
 		"    " + mutedStyle.Render("d           ") + valueStyle.Render("Scan for duplicates"),
 		"    " + mutedStyle.Render("u           ") + valueStyle.Render("Undo last operation"),
 		"    " + mutedStyle.Render("w           ") + valueStyle.Render("Toggle watch mode"),
+		"    " + mutedStyle.Render("c           ") + valueStyle.Render("Toggle context menu (Windows)"),
 		"    " + mutedStyle.Render("e           ") + valueStyle.Render("Browse and select source directory"),
 		"",
 		"  " + secondaryStyle.Render("Folder browser:"),

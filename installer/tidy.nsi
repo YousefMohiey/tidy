@@ -4,6 +4,7 @@
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "WordFunc.nsh"
+!include "nsDialogs.nsh"
 
 !ifndef PRODUCT_VERSION
   !define PRODUCT_VERSION "0.0.0"
@@ -20,6 +21,7 @@
 !define PRODUCT_WEB_SITE "https://github.com/YousefMohiey/tidy"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\tidy"
 !define PRODUCT_EXE "tidy.exe"
+!define PRODUCT_ICON "tidy.ico"
 
 ; --- General attributes ---
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
@@ -40,6 +42,7 @@ ShowUnInstDetails nevershow
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
+Page custom ContextMenuPage ContextMenuPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch tidy"
@@ -61,13 +64,46 @@ VIAddVersionKey "FileDescription" "${PRODUCT_NAME} Installer"
 VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
 
+; --- Context Menu Custom Page ---
+Var ContextMenuCheckbox
+Var ContextMenuState
+
+Function ContextMenuPage
+  nsDialogs::Create 1018
+  Pop $0
+
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+
+  !insertmacro MUI_HEADER_TEXT "Context Menu Integration" "Add 'Organize with tidy' to the right-click menu?"
+
+  ${NSD_CreateLabel} 0 0 100% 30u "Would you like to add 'Organize with tidy' to the Windows Explorer right-click menu?$
+$
+This lets you organize any folder by right-clicking it."
+  Pop $0
+
+  ${NSD_CreateCheckbox} 0 40u 100% 15u "Add 'Organize with tidy' to right-click menu"
+  Pop $ContextMenuCheckbox
+  ${NSD_Check} $ContextMenuCheckbox
+
+  nsDialogs::Show
+FunctionEnd
+
+Function ContextMenuPageLeave
+  ${NSD_GetState} $ContextMenuCheckbox $ContextMenuState
+FunctionEnd
+
 ; --- Installer sections ---
 Section "Install" SecInstall
   SectionIn RO
   SetOutPath "$INSTDIR"
 
-  ; Install the main binary (copied to installer/ by build-installer.sh)
+  ; Install the main binary
   File "${PRODUCT_EXE}"
+
+  ; Install the icon
+  File "${PRODUCT_ICON}"
 
   ; Install license
   File "..\LICENSE"
@@ -84,7 +120,7 @@ Section "Install" SecInstall
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\${PRODUCT_EXE}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\${PRODUCT_ICON}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
@@ -95,20 +131,37 @@ Section "Install" SecInstall
   ; Add install directory to user PATH
   Call AddToPath
 
-  ; Create Start Menu shortcut
+  ; Create Start Menu shortcut with icon
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}"
-  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\${PRODUCT_ICON}" 0
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "" 0
 
-  ; Strip Mark-of-the-Web (Zone.Identifier ADS) to prevent SmartScreen on installed files
-  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath \"$INSTDIR\${PRODUCT_EXE}\""'
-  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath \"$INSTDIR\uninstall.exe\""'
+  ; Create Desktop shortcut with icon
+  CreateShortcut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\${PRODUCT_ICON}" 0
+
+  ; Context Menu Registration (if user opted in)
+  ${If} $ContextMenuState == 1
+    ; Directory background (right-click in empty folder space)
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy" "" "Organize with tidy"
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy" "Icon" "$INSTDIR\${PRODUCT_ICON}"
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy\command" "" '"$INSTDIR\${PRODUCT_EXE}" organize "%V"'
+
+    ; Directory (right-click on folder icon)
+    WriteRegStr HKCU "Software\Classes\Directory\shell\tidy" "" "Organize with tidy"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\tidy" "Icon" "$INSTDIR\${PRODUCT_ICON}"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\tidy\command" "" '"$INSTDIR\${PRODUCT_EXE}" organize "%1"'
+  ${EndIf}
+
+  ; Strip Mark-of-the-Web
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath \'$INSTDIR\${PRODUCT_EXE}\'"'
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath \'$INSTDIR\uninstall.exe\'"'
 SectionEnd
 
 ; --- Uninstaller section ---
 Section "Uninstall"
   ; Remove files
   Delete "$INSTDIR\${PRODUCT_EXE}"
+  Delete "$INSTDIR\${PRODUCT_ICON}"
   Delete "$INSTDIR\uninstall.exe"
   Delete "$INSTDIR\LICENSE"
 
@@ -119,6 +172,13 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
+
+  ; Remove Desktop shortcut
+  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
+
+  ; Remove Context Menu registry keys
+  DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\tidy"
+  DeleteRegKey HKCU "Software\Classes\Directory\shell\tidy"
 
   ; Remove from user PATH
   Call un.RemoveFromPath
