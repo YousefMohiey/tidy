@@ -77,12 +77,8 @@ Function ContextMenuPage
   ${EndIf}
 
   !insertmacro MUI_HEADER_TEXT "Context Menu Integration" "Add 'Organize with tidy' to the right-click menu?"
-
-  ${NSD_CreateLabel} 0 0 100% 30u "Would you like to add 'Organize with tidy' to the Windows Explorer right-click menu?$
-$
-This lets you organize any folder by right-clicking it."
+  ${NSD_CreateLabel} 0 0 100% 30u "Would you like to add 'Organize with tidy' to the Windows Explorer right-click menu? It lets you organize any folder by right-clicking it."
   Pop $0
-
   ${NSD_CreateCheckbox} 0 40u 100% 15u "Add 'Organize with tidy' to right-click menu"
   Pop $ContextMenuCheckbox
   ${NSD_Check} $ContextMenuCheckbox
