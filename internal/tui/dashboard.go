@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -54,33 +55,21 @@ var (
 
 // DashboardData holds all data the dashboard needs to display.
 type DashboardData struct {
-	Journal   *organizer.Journal // may be nil
-	DedupScan *dedup.ScanResult  // may be nil
+	Journal   *organizer.Journal
+	DedupScan *dedup.ScanResult
 	SourceDir string
-	Config    *config.Config // may be nil; needed for organize operations
-}
-
-// NewDashboard creates and returns a Bubble Tea program for the dashboard.
-func NewDashboard(data DashboardData) *tea.Program {
-	m := model{
-		data:   data,
-		status: "Ready",
-	}
-	if m.data.SourceDir == "" {
-		if wd, err := os.Getwd(); err == nil {
-			m.data.SourceDir = wd
-		}
-	}
-	return tea.NewProgram(m, tea.WithAltScreen())
+	Config    *config.Config
 }
 
 // Run starts the dashboard TUI (blocking).
 func Run(data DashboardData) error {
-	_, err := NewDashboard(data).Run()
+	m := newModel(data)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
 	return err
 }
 
-// ── Async Result Messages ───────────────────────────────────────────────────
+// ── Async Messages ──────────────────────────────────────────────────────────
 
 type organizeResultMsg struct {
 	result *organizer.Result
@@ -98,17 +87,10 @@ type undoResultMsg struct {
 	err      error
 }
 
-type watchEventMsg struct {
-	info string
-}
-
 type watchDoneMsg struct{}
-
-
 
 // ── ActionResult ────────────────────────────────────────────────────────────
 
-// ActionResult stores the outcome of a user-initiated operation.
 type ActionResult struct {
 	Action    string
 	Timestamp time.Time
@@ -120,40 +102,41 @@ type ActionResult struct {
 // ── Model ───────────────────────────────────────────────────────────────────
 
 type model struct {
-	// Data
-	data DashboardData
-
-	// UI state
-	activeTab int // 0=Home, 1=Results, 2=Duplicates, 3=Help
-	scrollY   int
-	width     int
-	height    int
-
-	// Folder browser
-	browsingDir    bool
-	browsePath     string
-	browseEntries  []string
+	data         DashboardData
+	activeTab    int
+	scrollY      int
+	width        int
+	height       int
+	status       string
+	statusStyle  lipgloss.Style
+	lastResult   *ActionResult
+	selectedAction int
+	browsingDir  bool
+	browsePath   string
+	browseEntries []string
 	browseSelected int
-	browseScroll   int
-	typingPath     bool
-	pathInput      string
+	browseScroll int
+	typingPath   bool
+	pathInput    string
+	confirming   bool
+	confirmMsg   string
+	confirmAction string
+	watching     bool
+	watchCancel  context.CancelFunc
+}
 
-	// Action menu (Home tab)
-	selectedAction int // 0=Organize, 1=Preview, 2=Dedup, 3=Undo, 4=Watch
-
-	// Operation state
-	status      string
-	statusStyle lipgloss.Style
-	lastResult  *ActionResult
-
-	// Confirmation dialog
-	confirming     bool
-	confirmMsg     string
-	confirmAction  string // "undo"
-
-	// Watch mode
-	watching    bool
-	watchCancel context.CancelFunc
+func newModel(data DashboardData) model {
+	m := model{
+		data:        data,
+		status:      "Ready",
+		statusStyle: valueStyle,
+	}
+	if m.data.SourceDir == "" {
+		if wd, err := os.Getwd(); err == nil {
+			m.data.SourceDir = wd
+		}
+	}
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -164,7 +147,6 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -191,7 +173,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Summary:   fmt.Sprintf("%d files moved, %d skipped, %d errors", r.FilesMoved, r.FilesSkipped, len(r.Errors)),
 				Details:   formatMoves(r.Moves, m.data.SourceDir),
 			}
-			m.activeTab = 1 // switch to Results tab
+			m.activeTab = 1
 			m.scrollY = 0
 		}
 		m.reloadJournal()
@@ -205,7 +187,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusStyle = errorStyle
 		} else {
 			m.data.DedupScan = msg.result
-			m.activeTab = 2 // switch to Duplicates tab
+			m.activeTab = 2
 			m.scrollY = 0
 			m.status = fmt.Sprintf("Scan complete: %d duplicates found", len(msg.result.DuplicateGroups))
 			m.statusStyle = successStyle
@@ -239,11 +221,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reloadJournal()
 		return m, nil
 
-	case watchEventMsg:
-		m.status = msg.info
-		m.statusStyle = successStyle
-		return m, nil
-
 	case watchDoneMsg:
 		m.watching = false
 		m.status = "Watch mode stopped"
@@ -262,7 +239,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
-	// Ctrl+C always quits
 	if key == "ctrl+c" {
 		if m.watching && m.watchCancel != nil {
 			m.watchCancel()
@@ -270,7 +246,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// Confirmation dialog takes priority
 	if m.confirming {
 		return m.handleConfirmKey(key)
 	}
@@ -279,7 +254,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleBrowseKey(key)
 	}
 
-	// Global keys
 	switch key {
 	case "q", "esc":
 		if m.watching && m.watchCancel != nil {
@@ -312,16 +286,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Tab-specific keys
 	switch m.activeTab {
-	case 0: // Home
+	case 0:
 		return m.handleHomeKey(msg, key)
-	case 2: // Duplicates — 'd' triggers scan
+	case 2:
 		if key == "d" {
 			return m.runDedupScan()
 		}
 		return m.handleScrollKey(key)
-	case 1, 3: // Results, Help
+	case 1, 3:
 		return m.handleScrollKey(key)
 	}
 
@@ -391,7 +364,6 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 				m.browsePath = string(os.PathSeparator)
 			}
 		} else if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
-			// Drive letter entry (e.g. "D:") — navigate to D:\
 			m.browsePath = name + string(os.PathSeparator)
 		} else {
 			m.browsePath = filepath.Join(m.browsePath, name)
@@ -468,8 +440,6 @@ func (m *model) adjustBrowseScroll() {
 	}
 }
 
-// listWindowsDrives returns available drive letters on Windows (e.g. "C:", "D:").
-// On non-Windows systems it returns nil.
 func listWindowsDrives() []string {
 	if runtime.GOOS != "windows" {
 		return nil
@@ -509,7 +479,6 @@ func loadBrowseEntries(path string) []string {
 	if canGoUp {
 		result = append(result, "..")
 	} else if runtime.GOOS == "windows" {
-		// At filesystem root on Windows — show available drives instead of ".."
 		drives := listWindowsDrives()
 		result = append(result, drives...)
 	}
@@ -582,15 +551,15 @@ func (m model) handleScrollKey(key string) (tea.Model, tea.Cmd) {
 
 func (m model) executeAction(action int) (tea.Model, tea.Cmd) {
 	switch action {
-	case 0: // Organize
+	case 0:
 		return m.runOrganize(false)
-	case 1: // Preview
+	case 1:
 		return m.runOrganize(true)
-	case 2: // Dedup scan
+	case 2:
 		return m.runDedupScan()
-	case 3: // Undo
+	case 3:
 		return m.requestUndo()
-	case 4: // Watch
+	case 4:
 		return m.toggleWatch()
 	}
 	return m, nil
@@ -665,8 +634,7 @@ func (m model) runUndo() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		restored, err := journal.Undo()
 		if err == nil {
-			// Remove journal file after successful undo
-			jPath := journalPath()
+			jPath := paths.JournalPath()
 			if jPath != "" {
 				_ = os.Remove(jPath)
 			}
@@ -704,6 +672,7 @@ func (m model) toggleWatch() (tea.Model, tea.Cmd) {
 	dir := m.data.SourceDir
 	return m, func() tea.Msg {
 		w := watcher.New(dir, cfg, organizer.Options{})
+		w.Output = io.Discard
 		_ = w.Watch(ctx)
 		return watchDoneMsg{}
 	}
@@ -711,12 +680,8 @@ func (m model) toggleWatch() (tea.Model, tea.Cmd) {
 
 // ── Journal Helpers ─────────────────────────────────────────────────────────
 
-func journalPath() string {
-	return paths.JournalPath()
-}
-
 func (m *model) reloadJournal() {
-	jPath := journalPath()
+	jPath := paths.JournalPath()
 	if jPath == "" {
 		m.data.Journal = nil
 		return
@@ -741,15 +706,11 @@ func (m model) View() string {
 		innerWidth = 40
 	}
 
-	// Layout: top-border(1) + header(1) + separator(1) + content(N) + status(1) + bottom-border(1)
-	// Footer is rendered inside the content area to ensure proper clearing
-	// Using -6 instead of -5 to leave 1 line of padding, preventing terminal scrollback from hiding the header
 	contentHeight := m.height - 6
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
 
-	// Generate content lines
 	var lines []string
 	if m.confirming {
 		lines = m.confirmLines(innerWidth)
@@ -757,11 +718,9 @@ func (m model) View() string {
 		lines = m.tabContent(innerWidth)
 	}
 
-	// Append footer to content lines so it's part of the scrollable area
 	lines = append(lines, "")
 	lines = append(lines, m.renderFooter())
 
-	// Clamp scroll
 	maxScroll := len(lines) - contentHeight
 	if maxScroll < 0 {
 		maxScroll = 0
@@ -774,7 +733,6 @@ func (m model) View() string {
 		scrollY = 0
 	}
 
-	// Extract visible window
 	start := scrollY
 	end := start + contentHeight
 	if end > len(lines) {
@@ -786,7 +744,7 @@ func (m model) View() string {
 		if idx < end {
 			visible[i] = lines[idx]
 		} else {
-			visible[i] = "" // Fill remaining lines with empty strings
+			visible[i] = ""
 		}
 	}
 
@@ -794,31 +752,27 @@ func (m model) View() string {
 	b := borderStyle
 	ruler := strings.Repeat("─", innerWidth)
 
-	// Top border
+	sb.WriteString("\x1b[2J\x1b[H")
+
 	sb.WriteString(b.Render("╭" + ruler + "╮"))
 	sb.WriteByte('\n')
 
-	// Header
 	header := m.renderHeader(innerWidth)
 	sb.WriteString(b.Render("│") + padLine(header, innerWidth) + b.Render("│"))
 	sb.WriteByte('\n')
 
-	// Separator
 	sb.WriteString(b.Render("├" + ruler + "┤"))
 	sb.WriteByte('\n')
 
-	// Content lines
 	for _, line := range visible {
 		sb.WriteString(b.Render("│") + padLine(line, innerWidth) + b.Render("│"))
 		sb.WriteByte('\n')
 	}
 
-	// Status bar
 	statusLine := m.renderStatusBar(innerWidth)
 	sb.WriteString(b.Render("│") + padLine(statusLine, innerWidth) + b.Render("│"))
 	sb.WriteByte('\n')
 
-	// Bottom border
 	sb.WriteString(b.Render("╰" + ruler + "╯"))
 	sb.WriteByte('\n')
 
@@ -887,14 +841,14 @@ func (m model) renderFooter() string {
 	hints = append(hints, mutedStyle.Render("1-4")+valueStyle.Render(": tabs"))
 
 	switch m.activeTab {
-	case 0: // Home
+	case 0:
 		hints = append(hints,
 			mutedStyle.Render("enter")+valueStyle.Render(": select"),
 			mutedStyle.Render("e")+valueStyle.Render(": browse dir"),
 		)
-	case 1: // Results
+	case 1:
 		hints = append(hints, mutedStyle.Render("j/k")+valueStyle.Render(": scroll"))
-	case 2: // Duplicates
+	case 2:
 		hints = append(hints,
 			mutedStyle.Render("d")+valueStyle.Render(": scan"),
 			mutedStyle.Render("j/k")+valueStyle.Render(": scroll"),
@@ -994,22 +948,22 @@ func (m model) homeLines(width int) []string {
 			} else if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
 				displayName = "[" + name + "]"
 			}
-		if i == m.browseSelected {
-			indicator = accentStyle.Render("> ")
-			switch name {
-			case ".":
-				styled = accentStyle.Render(displayName)
-			case "..":
-				styled = mutedStyle.Render(displayName)
-			default:
-				styled = accentStyle.Render(displayName)
-			}
-		} else {
-			switch name {
-			case ".":
-				styled = secondaryStyle.Render(displayName)
-			case "..":
-				styled = mutedStyle.Render(displayName)
+			if i == m.browseSelected {
+				indicator = accentStyle.Render("> ")
+				switch name {
+				case ".":
+					styled = accentStyle.Render(displayName)
+				case "..":
+					styled = secondaryStyle.Render(displayName)
+				default:
+					styled = accentStyle.Render(displayName)
+				}
+			} else {
+				switch name {
+				case ".":
+					styled = secondaryStyle.Render(displayName)
+				case "..":
+					styled = mutedStyle.Render(displayName)
 				default:
 					styled = valueStyle.Render(displayName)
 				}
@@ -1060,7 +1014,6 @@ func (m model) homeLines(width int) []string {
 	}
 
 	lines = append(lines, "")
-
 	lines = append(lines, m.renderActionMenu(width)...)
 
 	return lines
@@ -1081,9 +1034,6 @@ func (m model) renderActionMenu(width int) []string {
 
 	var lines []string
 
-	// Box top with title
-	// Total line: indent(2) + ┌(1) + titlePart + dashes + ┐(1) = width
-	// dashes = width - 4 - len(titlePart)
 	titlePart := "─ Actions "
 	remaining := width - 4 - lipgloss.Width(titlePart)
 	if remaining < 0 {
@@ -1092,7 +1042,6 @@ func (m model) renderActionMenu(width int) []string {
 	topBorder := "  " + borderStyle.Render("┌"+titlePart+strings.Repeat("─", remaining)+"┐")
 	lines = append(lines, topBorder)
 
-	// Action items
 	for i, a := range actions {
 		indicator := "  "
 		labelText := a.label
@@ -1105,14 +1054,12 @@ func (m model) renderActionMenu(width int) []string {
 			labelText = valueStyle.Render(a.label)
 		}
 
-		// Watch mode indicator
 		extra := ""
 		if i == 4 && m.watching {
 			extra = " " + successStyle.Render("(active)")
 		}
 
 		content := indicator + labelText + extra
-		// Right-align shortcut
 		contentW := lipgloss.Width(content)
 		shortcutW := lipgloss.Width(shortcutText)
 		padding := width - 6 - contentW - shortcutW
@@ -1123,7 +1070,6 @@ func (m model) renderActionMenu(width int) []string {
 		lines = append(lines, line)
 	}
 
-	// Box bottom: indent(2) + └(1) + dashes + ┘(1) = width → dashes = width - 4
 	bottomRuler := width - 4
 	if bottomRuler < 0 {
 		bottomRuler = 0
@@ -1150,7 +1096,6 @@ func (m model) resultsLines(width int) []string {
 
 	r := m.lastResult
 
-	// Header
 	actionLabel := secondaryStyle.Render(r.Action)
 	timeLabel := mutedStyle.Render(r.Timestamp.Format("2006-01-02 15:04:05"))
 	lines = append(lines,
@@ -1196,43 +1141,46 @@ func (m model) resultsLines(width int) []string {
 func (m model) duplicatesLines(width int) []string {
 	var lines []string
 
-	// Scan action
 	lines = append(lines,
-		"  "+mutedStyle.Render("[d] Scan for duplicates (from Home tab or press d here)"),
+		"  "+accentStyle.Render("[d]")+valueStyle.Render(" Scan for duplicates in current directory"),
 		"",
 	)
 
 	if m.data.DedupScan == nil {
-		lines = append(lines,
-			"  "+mutedStyle.Render("No duplicate scan results available."),
-			"  "+mutedStyle.Render("Press 'd' on the Home tab to scan."),
-		)
+		lines = append(lines, "  "+mutedStyle.Render("No scan performed yet. Press 'd' to scan."))
 		return lines
 	}
 
-	s := m.data.DedupScan
+	r := m.data.DedupScan
 
 	lines = append(lines,
-		"  "+labelStyle.Render("Scan: ")+valueStyle.Render(
-			fmt.Sprintf("%d files, %d duplicate groups", s.TotalFiles, len(s.DuplicateGroups)),
-		),
-		"  "+labelStyle.Render("Wasted space: ")+accentStyle.Render(dedup.FormatSize(s.WastedBytes)),
+		"  "+labelStyle.Render("Scanned: ")+valueStyle.Render(fmt.Sprintf("%d files across %d directories", r.TotalFiles, len(r.ScannedDirs))),
+		"  "+labelStyle.Render("Unique: ")+valueStyle.Render(fmt.Sprintf("%d files", r.UniqueFiles)),
+		"  "+labelStyle.Render("Duplicate groups: ")+accentStyle.Render(fmt.Sprintf("%d", len(r.DuplicateGroups))),
+		"  "+labelStyle.Render("Wasted space: ")+errorStyle.Render(dedup.FormatSize(r.WastedBytes)),
 		"",
 	)
 
-	if len(s.DuplicateGroups) == 0 {
-		lines = append(lines, "  "+successStyle.Render("No duplicates found. Your files are clean!"))
+	if len(r.DuplicateGroups) == 0 {
+		lines = append(lines, "  "+successStyle.Render("No duplicates found."))
 		return lines
 	}
 
-	for i, g := range s.DuplicateGroups {
-		header := fmt.Sprintf("  Group %d (%s, %d copies):",
-			i+1, dedup.FormatSize(g.Size), len(g.Files))
-		lines = append(lines, secondaryStyle.Render(header))
+	lines = append(lines, "  "+secondaryStyle.Render("Duplicate groups:"))
+	lines = append(lines, "")
 
+	for i, g := range r.DuplicateGroups {
+		copies := len(g.Files)
+		wasted := int64(copies-1) * g.Size
+		lines = append(lines,
+			"  "+accentStyle.Render(fmt.Sprintf("Group %d", i+1))+
+				" ("+dedup.FormatSize(g.Size)+", "+
+				fmt.Sprintf("%d copies", copies)+", "+
+				dedup.FormatSize(wasted)+" wasted)",
+		)
 		for _, f := range g.Files {
-			display := f
-			avail := width - 6
+			display := "    " + f
+			avail := width - 4
 			if avail < 10 {
 				avail = 10
 			}
@@ -1294,12 +1242,10 @@ func (m model) helpLines() []string {
 func (m model) confirmLines(width int) []string {
 	var lines []string
 
-	// Add some vertical centering
 	for i := 0; i < 3; i++ {
 		lines = append(lines, "")
 	}
 
-	// Box
 	boxWidth := 50
 	if boxWidth > width-4 {
 		boxWidth = width - 4
@@ -1317,15 +1263,12 @@ func (m model) confirmLines(width int) []string {
 	innerRuler := strings.Repeat("─", boxWidth-2)
 	lines = append(lines, pad+borderStyle.Render("┌"+innerRuler+"┐"))
 
-	// Title line
 	titleContent := "  Confirm"
 	titleLine := pad + borderStyle.Render("│") + titleStyle.Render(titleContent) + strings.Repeat(" ", boxWidth-2-lipgloss.Width(titleContent)) + borderStyle.Render("│")
 	lines = append(lines, titleLine)
 
-	// Empty line
 	lines = append(lines, pad+borderStyle.Render("│")+strings.Repeat(" ", boxWidth-2)+borderStyle.Render("│"))
 
-	// Message
 	msgContent := "  " + m.confirmMsg
 	if lipgloss.Width(msgContent) > boxWidth-2 {
 		msgContent = truncateMiddle(msgContent, boxWidth-2)
@@ -1336,10 +1279,8 @@ func (m model) confirmLines(width int) []string {
 	}
 	lines = append(lines, pad+borderStyle.Render("│")+valueStyle.Render(msgContent)+strings.Repeat(" ", msgPad)+borderStyle.Render("│"))
 
-	// Empty line
 	lines = append(lines, pad+borderStyle.Render("│")+strings.Repeat(" ", boxWidth-2)+borderStyle.Render("│"))
 
-	// Buttons
 	buttons := "  " + successStyle.Render("[y] Confirm") + "   " + errorStyle.Render("[n] Cancel")
 	btnPad := boxWidth - 2 - lipgloss.Width(buttons)
 	if btnPad < 0 {
@@ -1347,7 +1288,6 @@ func (m model) confirmLines(width int) []string {
 	}
 	lines = append(lines, pad+borderStyle.Render("│")+buttons+strings.Repeat(" ", btnPad)+borderStyle.Render("│"))
 
-	// Bottom
 	lines = append(lines, pad+borderStyle.Render("└"+innerRuler+"┘"))
 
 	return lines
@@ -1367,7 +1307,6 @@ func formatMoves(moves []organizer.MoveRecord, sourceDir string) []string {
 		return nil
 	}
 
-	// Find max source filename length
 	maxSrcLen := 0
 	type moveEntry struct {
 		srcName string
@@ -1407,7 +1346,6 @@ func formatMoves(moves []organizer.MoveRecord, sourceDir string) []string {
 	return result
 }
 
-// padLine pads s with trailing spaces to fill the given visible width.
 func padLine(s string, width int) string {
 	visible := lipgloss.Width(s)
 	if visible >= width {
@@ -1416,7 +1354,6 @@ func padLine(s string, width int) string {
 	return s + strings.Repeat(" ", width-visible)
 }
 
-// truncateMiddle shortens s to maxLen by inserting "..." in the center.
 func truncateMiddle(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

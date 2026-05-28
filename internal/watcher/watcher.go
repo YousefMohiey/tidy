@@ -5,6 +5,7 @@ package watcher
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,14 @@ const tickInterval = 200 * time.Millisecond
 type Watcher struct {
 	dir       string
 	organizer *organizer.Organizer
+	Output    io.Writer
+}
+
+func (w *Watcher) output() io.Writer {
+	if w.Output != nil {
+		return w.Output
+	}
+	return os.Stdout
 }
 
 // New creates a Watcher that monitors dir and organizes files using the provided
@@ -56,7 +65,7 @@ func (w *Watcher) Watch(ctx context.Context) error {
 		return fmt.Errorf("watcher: failed to watch directory %q: %w", w.dir, err)
 	}
 
-	fmt.Printf("watching: %s\n", w.dir)
+	fmt.Fprintf(w.output(), "watching: %s\n", w.dir)
 
 	// pending tracks files being written: path -> last event time.
 	pending := make(map[string]time.Time)
@@ -66,7 +75,7 @@ func (w *Watcher) Watch(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("watcher: shutting down")
+			fmt.Fprintln(w.output(), "watcher: shutting down")
 			return ctx.Err()
 
 		case event, ok := <-fsw.Events:
@@ -79,7 +88,7 @@ func (w *Watcher) Watch(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			fmt.Printf("watcher error: %v\n", err)
+			fmt.Fprintf(w.output(), "watcher error: %v\n", err)
 
 		case now := <-ticker.C:
 			w.flushReady(now, pending)
@@ -142,13 +151,13 @@ func (w *Watcher) flushReady(now time.Time, pending map[string]time.Time) {
 func (w *Watcher) runOrganize() {
 	result, err := w.organizer.Organize(w.dir)
 	if err != nil {
-		fmt.Printf("organize error: %v\n", err)
+		fmt.Fprintf(w.output(), "organize error: %v\n", err)
 		return
 	}
 
 	// Log per-file errors from the result.
 	for _, e := range result.Errors {
-		fmt.Printf("organize file error: %v\n", e)
+		fmt.Fprintf(w.output(), "organize file error: %v\n", e)
 	}
 
 	// Log each successful move.
@@ -158,11 +167,11 @@ func (w *Watcher) runOrganize() {
 		if relErr != nil {
 			to = m.Destination
 		}
-		fmt.Printf("organized: %s → %s\n", from, to)
+		fmt.Fprintf(w.output(), "organized: %s → %s\n", from, to)
 	}
 
 	if result.FilesProcessed > 0 {
-		fmt.Printf("processed: %d, moved: %d, skipped: %d\n",
+		fmt.Fprintf(w.output(), "processed: %d, moved: %d, skipped: %d\n",
 			result.FilesProcessed, result.FilesMoved, result.FilesSkipped)
 	}
 }
