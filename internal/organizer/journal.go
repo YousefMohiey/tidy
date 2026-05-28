@@ -12,6 +12,7 @@ import (
 type MoveRecord struct {
 	Source      string    `json:"source"`
 	Destination string    `json:"destination"`
+	Category    string    `json:"category"`
 	Timestamp   time.Time `json:"timestamp"`
 }
 

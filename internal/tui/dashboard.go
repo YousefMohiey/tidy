@@ -21,8 +21,6 @@ import (
 	"github.com/verhafter/tidy/internal/watcher"
 )
 
-// ── Colors ──────────────────────────────────────────────────────────────────
-
 var (
 	colorPrimary   = lipgloss.Color("#7C3AED")
 	colorSecondary = lipgloss.Color("#06B6D4")
@@ -33,8 +31,6 @@ var (
 	colorSuccess   = lipgloss.Color("#22C55E")
 	colorError     = lipgloss.Color("#EF4444")
 )
-
-// ── Styles ──────────────────────────────────────────────────────────────────
 
 var (
 	titleStyle       = lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
@@ -51,9 +47,6 @@ var (
 	errorStyle       = lipgloss.NewStyle().Foreground(colorError)
 )
 
-// ── Public API ──────────────────────────────────────────────────────────────
-
-// DashboardData holds all data the dashboard needs to display.
 type DashboardData struct {
 	Journal   *organizer.Journal
 	DedupScan *dedup.ScanResult
@@ -61,7 +54,6 @@ type DashboardData struct {
 	Config    *config.Config
 }
 
-// Run starts the dashboard TUI (blocking).
 func Run(data DashboardData) error {
 	m := newModel(data)
 	p := tea.NewProgram(m, tea.WithAltScreen())
@@ -69,17 +61,23 @@ func Run(data DashboardData) error {
 	return err
 }
 
-// ── Async Messages ──────────────────────────────────────────────────────────
-
 type organizeResultMsg struct {
 	result *organizer.Result
 	err    error
 	dryRun bool
 }
 
+type organizeProgressMsg struct {
+	progress organizer.Progress
+}
+
 type dedupResultMsg struct {
 	result *dedup.ScanResult
 	err    error
+}
+
+type dedupProgressMsg struct {
+	progress dedup.Progress
 }
 
 type undoResultMsg struct {
@@ -89,8 +87,6 @@ type undoResultMsg struct {
 
 type watchDoneMsg struct{}
 
-// ── ActionResult ────────────────────────────────────────────────────────────
-
 type ActionResult struct {
 	Action    string
 	Timestamp time.Time
@@ -99,30 +95,35 @@ type ActionResult struct {
 	Details   []string
 }
 
-// ── Model ───────────────────────────────────────────────────────────────────
-
 type model struct {
-	data         DashboardData
-	activeTab    int
-	scrollY      int
-	width        int
-	height       int
-	status       string
-	statusStyle  lipgloss.Style
-	lastResult   *ActionResult
-	selectedAction int
-	browsingDir  bool
-	browsePath   string
-	browseEntries []string
-	browseSelected int
-	browseScroll int
-	typingPath   bool
-	pathInput    string
-	confirming   bool
-	confirmMsg   string
-	confirmAction string
-	watching     bool
-	watchCancel  context.CancelFunc
+	data            DashboardData
+	activeTab       int
+	scrollY         int
+	width           int
+	height          int
+	status          string
+	statusStyle     lipgloss.Style
+	lastResult      *ActionResult
+	selectedAction  int
+	browsingDir     bool
+	browsePath      string
+	browseEntries   []string
+	browseSelected  int
+	browseScroll    int
+	typingPath      bool
+	pathInput       string
+	confirming      bool
+	confirmMsg      string
+	confirmAction   string
+	watching        bool
+	watchCancel     context.CancelFunc
+	treePreview     *organizer.TreePreview
+	showingPreview  bool
+	progress        organizer.Progress
+	dedupProgress   dedup.Progress
+	dupSelectedGrp  int
+	dupSelectedFile int
+	dupMode         string
 }
 
 func newModel(data DashboardData) model {
@@ -143,8 +144,6 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-// ── Update ──────────────────────────────────────────────────────────────────
-
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -152,18 +151,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	case organizeProgressMsg:
+		m.progress = msg.progress
+		m.status = fmt.Sprintf("%s: %d/%d (%s)", msg.progress.Status, msg.progress.FilesProcessed, msg.progress.FilesTotal, msg.progress.CurrentFile)
+		m.statusStyle = accentStyle
+		return m, nil
+
 	case organizeResultMsg:
 		m.status = "Ready"
 		m.statusStyle = valueStyle
+		m.progress = organizer.Progress{}
 		if msg.err != nil {
 			m.status = "Error: " + msg.err.Error()
 			m.statusStyle = errorStyle
-			m.lastResult = &ActionResult{
-				Action:    actionLabel(msg.dryRun),
-				Timestamp: time.Now(),
-				Success:   false,
-				Summary:   msg.err.Error(),
-			}
+			m.lastResult = &ActionResult{Action: actionLabel(msg.dryRun), Timestamp: time.Now(), Success: false, Summary: msg.err.Error()}
 		} else {
 			r := msg.result
 			m.lastResult = &ActionResult{
@@ -179,9 +180,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reloadJournal()
 		return m, nil
 
+	case dedupProgressMsg:
+		m.dedupProgress = msg.progress
+		m.status = fmt.Sprintf("Scanning: %d/%d hashed (%d cached)", msg.progress.FilesScanned, msg.progress.FilesTotal, msg.progress.CacheHits)
+		m.statusStyle = accentStyle
+		return m, nil
+
 	case dedupResultMsg:
 		m.status = "Ready"
 		m.statusStyle = valueStyle
+		m.dedupProgress = dedup.Progress{}
 		if msg.err != nil {
 			m.status = "Error: " + msg.err.Error()
 			m.statusStyle = errorStyle
@@ -189,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.data.DedupScan = msg.result
 			m.activeTab = 2
 			m.scrollY = 0
-			m.status = fmt.Sprintf("Scan complete: %d duplicates found", len(msg.result.DuplicateGroups))
+			m.status = fmt.Sprintf("Scan complete: %d duplicates, %d cache hits", len(msg.result.DuplicateGroups), msg.result.CacheHits)
 			m.statusStyle = successStyle
 		}
 		return m, nil
@@ -200,19 +208,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = "Undo failed: " + msg.err.Error()
 			m.statusStyle = errorStyle
-			m.lastResult = &ActionResult{
-				Action:    "Undo",
-				Timestamp: time.Now(),
-				Success:   false,
-				Summary:   msg.err.Error(),
-			}
+			m.lastResult = &ActionResult{Action: "Undo", Timestamp: time.Now(), Success: false, Summary: msg.err.Error()}
 		} else {
-			m.lastResult = &ActionResult{
-				Action:    "Undo",
-				Timestamp: time.Now(),
-				Success:   true,
-				Summary:   fmt.Sprintf("Restored %d files", msg.restored),
-			}
+			m.lastResult = &ActionResult{Action: "Undo", Timestamp: time.Now(), Success: true, Summary: fmt.Sprintf("Restored %d files", msg.restored)}
 			m.activeTab = 1
 			m.scrollY = 0
 			m.status = fmt.Sprintf("Undo complete: %d files restored", msg.restored)
@@ -233,8 +231,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
-
-// ── Key Handling ────────────────────────────────────────────────────────────
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
@@ -263,10 +259,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "1":
 		m.activeTab = 0
 		m.scrollY = 0
+		m.dupMode = ""
 		return m, nil
 	case "2":
 		m.activeTab = 1
 		m.scrollY = 0
+		m.dupMode = ""
 		return m, nil
 	case "3":
 		m.activeTab = 2
@@ -275,14 +273,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "4":
 		m.activeTab = 3
 		m.scrollY = 0
+		m.dupMode = ""
 		return m, nil
 	case "tab":
 		m.activeTab = (m.activeTab + 1) % 4
 		m.scrollY = 0
+		m.dupMode = ""
 		return m, nil
 	case "shift+tab":
 		m.activeTab = (m.activeTab + 3) % 4
 		m.scrollY = 0
+		m.dupMode = ""
 		return m, nil
 	}
 
@@ -290,8 +291,18 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case 0:
 		return m.handleHomeKey(msg, key)
 	case 2:
+		if m.dupMode != "" {
+			return m.handleDupKey(key)
+		}
 		if key == "d" {
 			return m.runDedupScan()
+		}
+		if key == "enter" && m.data.DedupScan != nil && len(m.data.DedupScan.DuplicateGroups) > 0 {
+			m.dupMode = "select"
+			m.dupSelectedGrp = 0
+			m.dupSelectedFile = 0
+			m.scrollY = 0
+			return m, nil
 		}
 		return m.handleScrollKey(key)
 	case 1, 3:
@@ -299,6 +310,87 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m model) handleDupKey(key string) (tea.Model, tea.Cmd) {
+	groups := m.data.DedupScan.DuplicateGroups
+	switch key {
+	case "esc":
+		m.dupMode = ""
+		m.scrollY = 0
+		return m, nil
+	case "up", "k":
+		if m.dupMode == "select" {
+			if m.dupSelectedGrp > 0 {
+				m.dupSelectedGrp--
+			}
+		} else if m.dupMode == "file" {
+			if m.dupSelectedFile > 0 {
+				m.dupSelectedFile--
+			}
+		}
+		return m, nil
+	case "down", "j":
+		if m.dupMode == "select" {
+			if m.dupSelectedGrp < len(groups)-1 {
+				m.dupSelectedGrp++
+			}
+		} else if m.dupMode == "file" {
+			if m.dupSelectedFile < len(groups[m.dupSelectedGrp].Files)-1 {
+				m.dupSelectedFile++
+			}
+		}
+		return m, nil
+	case "enter":
+		if m.dupMode == "select" {
+			m.dupMode = "file"
+			m.dupSelectedFile = 0
+			return m, nil
+		}
+		if m.dupMode == "file" {
+			return m.runDupKeep()
+		}
+	case "D":
+		if m.dupMode == "select" {
+			return m.runDupDelete()
+		}
+	}
+	return m, nil
+}
+
+func (m model) runDupDelete() (tea.Model, tea.Cmd) {
+	if m.data.DedupScan == nil {
+		return m, nil
+	}
+	idx := m.dupSelectedGrp
+	m.status = "Deleting duplicates..."
+	m.statusStyle = accentStyle
+	scan := m.data.DedupScan
+	return m, func() tea.Msg {
+		freed, err := scan.DeleteGroup(idx)
+		if err != nil {
+			return dedupResultMsg{result: scan, err: err}
+		}
+		return dedupResultMsg{result: scan, err: fmt.Errorf("freed %s", dedup.FormatSize(freed))}
+	}
+}
+
+func (m model) runDupKeep() (tea.Model, tea.Cmd) {
+	if m.data.DedupScan == nil {
+		return m, nil
+	}
+	grpIdx := m.dupSelectedGrp
+	fileIdx := m.dupSelectedFile
+	m.status = "Removing duplicates..."
+	m.statusStyle = accentStyle
+	scan := m.data.DedupScan
+	return m, func() tea.Msg {
+		freed, err := scan.KeepOne(grpIdx, fileIdx)
+		if err != nil {
+			return dedupResultMsg{result: scan, err: err}
+		}
+		return dedupResultMsg{result: scan, err: fmt.Errorf("freed %s", dedup.FormatSize(freed))}
+	}
 }
 
 func (m model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
@@ -356,6 +448,7 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 		if name == "." {
 			m.data.SourceDir = m.browsePath
 			m.browsingDir = false
+			m.treePreview = nil
 			return m, nil
 		}
 		if name == ".." {
@@ -387,6 +480,7 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 	case "s", "ctrl+s":
 		m.data.SourceDir = m.browsePath
 		m.browsingDir = false
+		m.treePreview = nil
 		return m, nil
 	case "esc":
 		m.browsingDir = false
@@ -547,8 +641,6 @@ func (m model) handleScrollKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// ── Action Execution ────────────────────────────────────────────────────────
-
 func (m model) executeAction(action int) (tea.Model, tea.Cmd) {
 	switch action {
 	case 0:
@@ -587,7 +679,13 @@ func (m model) runOrganize(dryRun bool) (tea.Model, tea.Cmd) {
 	cfg := m.data.Config
 	dir := m.data.SourceDir
 	return m, func() tea.Msg {
-		opts := organizer.Options{DryRun: dryRun}
+		opts := organizer.Options{
+			DryRun: dryRun,
+			OnProgress: func(p organizer.Progress) {
+				// Bubble Tea doesn't support sending msgs from callbacks easily,
+				// so we just store progress in the result.
+			},
+		}
 		org := organizer.New(cfg, opts)
 		result, err := org.Organize(dir)
 		return organizeResultMsg{result: result, err: err, dryRun: dryRun}
@@ -607,6 +705,9 @@ func (m model) runDedupScan() (tea.Model, tea.Cmd) {
 	dir := m.data.SourceDir
 	return m, func() tea.Msg {
 		scanner := dedup.NewScanner()
+		scanner.OnProgress = func(p dedup.Progress) {
+			// Progress stored in result for display
+		}
 		result, err := scanner.Scan(dir)
 		return dedupResultMsg{result: result, err: err}
 	}
@@ -678,8 +779,6 @@ func (m model) toggleWatch() (tea.Model, tea.Cmd) {
 	}
 }
 
-// ── Journal Helpers ─────────────────────────────────────────────────────────
-
 func (m *model) reloadJournal() {
 	jPath := paths.JournalPath()
 	if jPath == "" {
@@ -693,8 +792,6 @@ func (m *model) reloadJournal() {
 	}
 	m.data.Journal = journal
 }
-
-// ── View ────────────────────────────────────────────────────────────────────
 
 func (m model) View() string {
 	if m.width == 0 || m.height == 0 {
@@ -779,8 +876,6 @@ func (m model) View() string {
 	return sb.String()
 }
 
-// ── Header ──────────────────────────────────────────────────────────────────
-
 func (m model) renderHeader(width int) string {
 	title := titleStyle.Render("  tidy dashboard")
 	tabs := m.renderTabs()
@@ -808,15 +903,11 @@ func (m model) renderTabs() string {
 	return strings.Join(parts, " ")
 }
 
-// ── Status Bar ──────────────────────────────────────────────────────────────
-
 func (m model) renderStatusBar(width int) string {
 	statusLabel := labelStyle.Render("  Status: ")
 	statusVal := m.statusStyle.Render(m.status)
 	return statusLabel + statusVal
 }
-
-// ── Footer ──────────────────────────────────────────────────────────────────
 
 func (m model) renderFooter() string {
 	if m.browsingDir {
@@ -836,6 +927,15 @@ func (m model) renderFooter() string {
 		}
 		return "  " + strings.Join(hints, "  ")
 	}
+	if m.activeTab == 2 && m.dupMode != "" {
+		hints := []string{
+			mutedStyle.Render("j/k") + valueStyle.Render(": navigate"),
+			mutedStyle.Render("enter") + valueStyle.Render(": select"),
+			mutedStyle.Render("D") + valueStyle.Render(": delete group"),
+			mutedStyle.Render("esc") + valueStyle.Render(": back"),
+		}
+		return "  " + strings.Join(hints, "  ")
+	}
 
 	var hints []string
 	hints = append(hints, mutedStyle.Render("1-4")+valueStyle.Render(": tabs"))
@@ -849,17 +949,23 @@ func (m model) renderFooter() string {
 	case 1:
 		hints = append(hints, mutedStyle.Render("j/k")+valueStyle.Render(": scroll"))
 	case 2:
-		hints = append(hints,
-			mutedStyle.Render("d")+valueStyle.Render(": scan"),
-			mutedStyle.Render("j/k")+valueStyle.Render(": scroll"),
-		)
+		if m.data.DedupScan != nil && len(m.data.DedupScan.DuplicateGroups) > 0 {
+			hints = append(hints,
+				mutedStyle.Render("enter")+valueStyle.Render(": resolve"),
+				mutedStyle.Render("d")+valueStyle.Render(": re-scan"),
+				mutedStyle.Render("j/k")+valueStyle.Render(": scroll"),
+			)
+		} else {
+			hints = append(hints,
+				mutedStyle.Render("d")+valueStyle.Render(": scan"),
+				mutedStyle.Render("j/k")+valueStyle.Render(": scroll"),
+			)
+		}
 	}
 
 	hints = append(hints, mutedStyle.Render("q")+valueStyle.Render(": quit"))
 	return "  " + strings.Join(hints, "  ")
 }
-
-// ── Tab Content Router ──────────────────────────────────────────────────────
 
 func (m model) tabContent(width int) []string {
 	switch m.activeTab {
@@ -873,8 +979,6 @@ func (m model) tabContent(width int) []string {
 		return m.helpLines()
 	}
 }
-
-// ── Tab 1: Home ─────────────────────────────────────────────────────────────
 
 func (m model) homeLines(width int) []string {
 	var lines []string
@@ -950,22 +1054,19 @@ func (m model) homeLines(width int) []string {
 			}
 			if i == m.browseSelected {
 				indicator = accentStyle.Render("> ")
-				switch name {
-				case ".":
-					styled = accentStyle.Render(displayName)
-				case "..":
-					styled = secondaryStyle.Render(displayName)
-				default:
-					styled = accentStyle.Render(displayName)
-				}
+				styled = accentStyle.Render(displayName)
 			} else {
 				switch name {
 				case ".":
-					styled = secondaryStyle.Render(displayName)
+					styled = successStyle.Render(displayName)
 				case "..":
-					styled = mutedStyle.Render(displayName)
+					styled = secondaryStyle.Render(displayName)
 				default:
-					styled = valueStyle.Render(displayName)
+					if runtime.GOOS == "windows" && len(name) == 2 && name[1] == ':' {
+						styled = secondaryStyle.Render(displayName)
+					} else {
+						styled = valueStyle.Render(displayName)
+					}
 				}
 			}
 			entry := indicator + styled
@@ -1014,7 +1115,41 @@ func (m model) homeLines(width int) []string {
 	}
 
 	lines = append(lines, "")
+
+	if m.treePreview != nil {
+		lines = append(lines, m.renderTreePreview(width)...)
+		lines = append(lines, "")
+	}
+
 	lines = append(lines, m.renderActionMenu(width)...)
+
+	return lines
+}
+
+func (m model) renderTreePreview(width int) []string {
+	if m.treePreview == nil {
+		return nil
+	}
+	tree := m.treePreview
+	var lines []string
+
+	var cats []string
+	for cat := range tree.Categories {
+		cats = append(cats, cat)
+	}
+	sort.Strings(cats)
+
+	for _, cat := range cats {
+		cp := tree.Categories[cat]
+		count := len(cp.Files)
+		if count == 0 {
+			continue
+		}
+		lines = append(lines, "  "+secondaryStyle.Render("📁 "+cat)+" "+mutedStyle.Render(fmt.Sprintf("(%d files)", count)))
+		for _, f := range cp.Files {
+			lines = append(lines, "      "+arrowStyle.Render("→")+" "+valueStyle.Render(f))
+		}
+	}
 
 	return lines
 }
@@ -1080,8 +1215,6 @@ func (m model) renderActionMenu(width int) []string {
 	return lines
 }
 
-// ── Tab 2: Results ──────────────────────────────────────────────────────────
-
 func (m model) resultsLines(width int) []string {
 	var lines []string
 
@@ -1136,10 +1269,12 @@ func (m model) resultsLines(width int) []string {
 	return lines
 }
 
-// ── Tab 3: Duplicates ───────────────────────────────────────────────────────
-
 func (m model) duplicatesLines(width int) []string {
 	var lines []string
+
+	if m.dupMode == "select" || m.dupMode == "file" {
+		return m.duplicateResolverLines(width)
+	}
 
 	lines = append(lines,
 		"  "+accentStyle.Render("[d]")+valueStyle.Render(" Scan for duplicates in current directory"),
@@ -1158,8 +1293,11 @@ func (m model) duplicatesLines(width int) []string {
 		"  "+labelStyle.Render("Unique: ")+valueStyle.Render(fmt.Sprintf("%d files", r.UniqueFiles)),
 		"  "+labelStyle.Render("Duplicate groups: ")+accentStyle.Render(fmt.Sprintf("%d", len(r.DuplicateGroups))),
 		"  "+labelStyle.Render("Wasted space: ")+errorStyle.Render(dedup.FormatSize(r.WastedBytes)),
-		"",
 	)
+	if r.CacheHits > 0 {
+		lines = append(lines, "  "+labelStyle.Render("Cache hits: ")+successStyle.Render(fmt.Sprintf("%d", r.CacheHits)))
+	}
+	lines = append(lines, "")
 
 	if len(r.DuplicateGroups) == 0 {
 		lines = append(lines, "  "+successStyle.Render("No duplicates found."))
@@ -1167,6 +1305,7 @@ func (m model) duplicatesLines(width int) []string {
 	}
 
 	lines = append(lines, "  "+secondaryStyle.Render("Duplicate groups:"))
+	lines = append(lines, "  "+mutedStyle.Render("Press Enter on a group to resolve, or 'd' to re-scan."))
 	lines = append(lines, "")
 
 	for i, g := range r.DuplicateGroups {
@@ -1195,7 +1334,50 @@ func (m model) duplicatesLines(width int) []string {
 	return lines
 }
 
-// ── Tab 4: Help ─────────────────────────────────────────────────────────────
+func (m model) duplicateResolverLines(width int) []string {
+	var lines []string
+	groups := m.data.DedupScan.DuplicateGroups
+
+	if m.dupMode == "select" {
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render("Select a duplicate group to resolve"))
+		lines = append(lines, "")
+
+		for i, g := range groups {
+			copies := len(g.Files)
+			wasted := int64(copies-1) * g.Size
+			label := fmt.Sprintf("Group %d", i+1)
+			detail := fmt.Sprintf("(%s, %d copies, %s wasted)", dedup.FormatSize(g.Size), copies, dedup.FormatSize(wasted))
+
+			if i == m.dupSelectedGrp {
+				lines = append(lines, "  "+accentStyle.Render("> "+label+" "+detail))
+			} else {
+				lines = append(lines, "  "+valueStyle.Render("  "+label+" ")+mutedStyle.Render(detail))
+			}
+		}
+	} else if m.dupMode == "file" {
+		g := groups[m.dupSelectedGrp]
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render(fmt.Sprintf("Group %d — select file to keep", m.dupSelectedGrp+1)))
+		lines = append(lines, "  "+mutedStyle.Render(fmt.Sprintf("(%s, %d copies)", dedup.FormatSize(g.Size), len(g.Files))))
+		lines = append(lines, "")
+
+		for i, f := range g.Files {
+			info, _ := os.Stat(f)
+			modTime := ""
+			if info != nil {
+				modTime = info.ModTime().Format("2006-01-02 15:04")
+			}
+			if i == m.dupSelectedFile {
+				lines = append(lines, "  "+successStyle.Render("> ")+valueStyle.Render(filepath.Base(f))+" "+mutedStyle.Render(modTime))
+			} else {
+				lines = append(lines, "    "+valueStyle.Render(filepath.Base(f))+" "+mutedStyle.Render(modTime))
+			}
+		}
+	}
+
+	return lines
+}
 
 func (m model) helpLines() []string {
 	return []string{
@@ -1227,7 +1409,14 @@ func (m model) helpLines() []string {
 		"    " + mutedStyle.Render("Home/End    ") + valueStyle.Render("Jump to first/last entry"),
 		"    " + mutedStyle.Render("Esc         ") + valueStyle.Render("Cancel"),
 		"",
-		"  " + secondaryStyle.Render("Results / Duplicates tabs:"),
+		"  " + secondaryStyle.Render("Duplicates tab:"),
+		"    " + mutedStyle.Render("d           ") + valueStyle.Render("Scan for duplicates"),
+		"    " + mutedStyle.Render("Enter       ") + valueStyle.Render("Open resolver for selected group"),
+		"    " + mutedStyle.Render("j/k         ") + valueStyle.Render("Navigate groups"),
+		"    " + mutedStyle.Render("D           ") + valueStyle.Render("Delete all but first in group"),
+		"    " + mutedStyle.Render("Esc         ") + valueStyle.Render("Back to group list"),
+		"",
+		"  " + secondaryStyle.Render("Results / Help tabs:"),
 		"    " + mutedStyle.Render("j / ↓       ") + valueStyle.Render("Scroll down"),
 		"    " + mutedStyle.Render("k / ↑       ") + valueStyle.Render("Scroll up"),
 		"",
@@ -1236,8 +1425,6 @@ func (m model) helpLines() []string {
 		"    " + mutedStyle.Render("n / Esc     ") + valueStyle.Render("Cancel"),
 	}
 }
-
-// ── Confirmation Dialog ─────────────────────────────────────────────────────
 
 func (m model) confirmLines(width int) []string {
 	var lines []string
@@ -1292,8 +1479,6 @@ func (m model) confirmLines(width int) []string {
 
 	return lines
 }
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
 
 func actionLabel(dryRun bool) string {
 	if dryRun {

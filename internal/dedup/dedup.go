@@ -1,6 +1,7 @@
 // Package dedup provides duplicate file detection by content hashing.
 // It uses a size-first optimization to avoid hashing files with unique sizes,
 // then applies SHA256 streaming hashes only to size-matched candidates.
+// A persistent hash cache avoids re-hashing unchanged files on subsequent scans.
 package dedup
 
 import (
@@ -11,15 +12,17 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // DuplicateGroup represents a set of files with identical content.
 type DuplicateGroup struct {
-	Hash  string   `json:"hash"`  // SHA256 hex digest
-	Size  int64    `json:"size"`  // file size in bytes
-	Files []string `json:"files"` // absolute paths
+	Hash  string   `json:"hash"`
+	Size  int64    `json:"size"`
+	Files []string `json:"files"`
 }
 
 // ScanResult holds the outcome of a duplicate scan.
@@ -27,35 +30,49 @@ type ScanResult struct {
 	TotalFiles      int              `json:"total_files"`
 	UniqueFiles     int              `json:"unique_files"`
 	DuplicateGroups []DuplicateGroup `json:"duplicate_groups"`
-	WastedBytes     int64            `json:"wasted_bytes"` // total bytes that could be reclaimed
+	WastedBytes     int64            `json:"wasted_bytes"`
 	ScannedDirs     []string         `json:"scanned_dirs"`
+	CacheHits       int              `json:"cache_hits"`
+	CacheMisses     int              `json:"cache_misses"`
+}
+
+// Progress reports the current state of a dedup scan.
+type Progress struct {
+	FilesTotal     int
+	FilesScanned   int
+	FilesHashed    int
+	CacheHits      int
+	CurrentFile    string
+	Status         string
 }
 
 // Scanner finds duplicate files across one or more directories.
 type Scanner struct {
-	// MinSize is the minimum file size to consider (skip empty files).
-	// Default: 1 byte.
-	MinSize int64
-	// MaxSize is the maximum file size to hash (skip very large files).
-	// Default: 1 GB (1073741824 bytes). Set to 0 to disable.
-	MaxSize int64
-	// MaxDepth limits how deep to recurse. 0 means unlimited.
-	MaxDepth int
+	MinSize   int64
+	MaxSize   int64
+	MaxDepth  int
+	Cache     *HashCache
+	OnProgress func(Progress)
 }
 
 // NewScanner creates a Scanner with default settings.
 func NewScanner() *Scanner {
 	return &Scanner{
-		MinSize: 1,
-		MaxSize: 1073741824, // 1 GB
+		MinSize:  1,
+		MaxSize:  1073741824,
 		MaxDepth: 0,
+		Cache:    NewHashCache(),
 	}
 }
 
-// Scan walks the given directories (recursively), groups files by size first
-// (optimization: files with unique sizes cannot be duplicates), then hashes
-// only size-matched files with SHA256.
-// Returns a ScanResult with all duplicate groups found.
+func (s *Scanner) reportProgress(p Progress) {
+	if s.OnProgress != nil {
+		s.OnProgress(p)
+	}
+}
+
+// Scan walks the given directories, groups files by size, then hashes
+// only size-matched files with SHA256. Uses cache to skip unchanged files.
 func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 	if len(dirs) == 0 {
 		return nil, fmt.Errorf("scan: no directories provided")
@@ -66,7 +83,6 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 		minSize = 1
 	}
 
-	// Resolve and deduplicate input directories
 	scannedDirs := make([]string, 0, len(dirs))
 	seenDirs := make(map[string]bool)
 	for _, dir := range dirs {
@@ -88,14 +104,12 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 		return nil, fmt.Errorf("scan: no valid directories found")
 	}
 
-	// Phase 1: Walk all directories, group files by size
 	sizeGroups := make(map[int64][]string)
 	totalFiles := 0
 
 	for _, dir := range scannedDirs {
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				// Skip entries we can't access
 				if d != nil && d.IsDir() {
 					return filepath.SkipDir
 				}
@@ -103,8 +117,6 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 			}
 
 			name := d.Name()
-
-		// Skip hidden files and directories
 			if strings.HasPrefix(name, ".") {
 				if d.IsDir() {
 					return filepath.SkipDir
@@ -112,56 +124,40 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 				return nil
 			}
 
-			// Skip known system/cache directories
 			skipDirs := map[string]bool{
-				"node_modules": true,
-				".git":         true,
-				"__pycache__":  true,
-				"venv":         true,
-				".venv":        true,
-				"vendor":       true,
-				".cargo":       true,
-				"target":       true,
-				"obj":          true,
-				"bin":          true,
+				"node_modules": true, ".git": true, "__pycache__": true,
+				"venv": true, ".venv": true, "vendor": true,
+				".cargo": true, "target": true, "obj": true, "bin": true,
 			}
 			if d.IsDir() && skipDirs[strings.ToLower(name)] {
 				return filepath.SkipDir
 			}
 
-			// Skip symlinks
 			if d.Type()&fs.ModeSymlink != 0 {
 				return nil
 			}
-
-			// Skip directories (but continue recursing into them)
 			if d.IsDir() {
 				return nil
 			}
 
-			// Get file info for size
 			info, err := d.Info()
 			if err != nil {
-				return nil // skip unreadable entries
+				return nil
 			}
 
 			size := info.Size()
 			if size < minSize {
 				return nil
 			}
-
-			// Skip files larger than MaxSize (avoid hashing huge files)
 			if s.MaxSize > 0 && size > s.MaxSize {
 				return nil
 			}
 
 			totalFiles++
-
 			absPath, err := filepath.Abs(path)
 			if err != nil {
 				absPath = path
 			}
-
 			sizeGroups[size] = append(sizeGroups[size], absPath)
 			return nil
 		})
@@ -170,36 +166,113 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 		}
 	}
 
-	// Phase 2: Filter to only sizes with multiple files (potential duplicates)
-	// and hash those files
-	hashGroups := make(map[string]*DuplicateGroup)
+	type hashTask struct {
+		path string
+		size int64
+	}
+	var tasks []hashTask
 
 	for size, paths := range sizeGroups {
 		if len(paths) < 2 {
-			continue // unique size, cannot be duplicate
+			continue
 		}
-
 		for _, path := range paths {
-			hash, err := hashFile(path)
-			if err != nil {
-				continue // skip unreadable files
-			}
-
-			key := fmt.Sprintf("%s:%d", hash, size)
-			group, exists := hashGroups[key]
-			if !exists {
-				group = &DuplicateGroup{
-					Hash:  hash,
-					Size:  size,
-					Files: make([]string, 0),
-				}
-				hashGroups[key] = group
-			}
-			group.Files = append(group.Files, path)
+			tasks = append(tasks, hashTask{path: path, size: size})
 		}
 	}
 
-	// Phase 3: Build result — only groups with 2+ files are duplicates
+	cacheHits := 0
+	cacheMisses := 0
+	hashGroups := make(map[string]*DuplicateGroup)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	workers := runtime.NumCPU()
+	if workers > 4 {
+		workers = 4
+	}
+	if workers < 1 {
+		workers = 1
+	}
+
+	ch := make(chan hashTask, workers)
+	scanned := 0
+	var scanMu sync.Mutex
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range ch {
+				scanMu.Lock()
+				scanned++
+				sc := scanned
+				scanMu.Unlock()
+
+				s.reportProgress(Progress{
+					FilesTotal:   len(tasks),
+					FilesScanned: sc,
+					CacheHits:    cacheHits,
+					CurrentFile:  filepath.Base(t.path),
+					Status:       "hashing",
+				})
+
+				info, err := os.Stat(t.path)
+				if err != nil {
+					continue
+				}
+
+				var hash string
+				if s.Cache != nil {
+					if cached, ok := s.Cache.Get(t.path); ok {
+						hash = cached
+						mu.Lock()
+						cacheHits++
+						mu.Unlock()
+					}
+				}
+
+				if hash == "" {
+					h, err := hashFile(t.path)
+					if err != nil {
+						continue
+					}
+					hash = h
+					if s.Cache != nil {
+						s.Cache.Set(t.path, info.Size(), info.ModTime(), hash)
+					}
+					mu.Lock()
+					cacheMisses++
+					mu.Unlock()
+				}
+
+				key := fmt.Sprintf("%s:%d", hash, t.size)
+				mu.Lock()
+				group, exists := hashGroups[key]
+				if !exists {
+					group = &DuplicateGroup{
+						Hash:  hash,
+						Size:  t.size,
+						Files: make([]string, 0),
+					}
+					hashGroups[key] = group
+				}
+				group.Files = append(group.Files, t.path)
+				mu.Unlock()
+			}
+		}()
+	}
+
+	for _, t := range tasks {
+		ch <- t
+	}
+	close(ch)
+	wg.Wait()
+
+	if s.Cache != nil {
+		_ = s.Cache.Save()
+	}
+
 	dupGroups := make([]DuplicateGroup, 0)
 	filesInDupGroups := 0
 
@@ -207,32 +280,25 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 		if len(group.Files) < 2 {
 			continue
 		}
-
-		// Sort files alphabetically within each group
 		sort.Strings(group.Files)
-
 		filesInDupGroups += len(group.Files)
 		dupGroups = append(dupGroups, *group)
 	}
 
-	// Sort groups by wasted bytes descending (biggest duplicates first)
 	sort.Slice(dupGroups, func(i, j int) bool {
 		wasteI := (int64(len(dupGroups[i].Files)) - 1) * dupGroups[i].Size
 		wasteJ := (int64(len(dupGroups[j].Files)) - 1) * dupGroups[j].Size
 		if wasteI != wasteJ {
 			return wasteI > wasteJ
 		}
-		// Tie-break by first file path for deterministic output
 		return dupGroups[i].Files[0] < dupGroups[j].Files[0]
 	})
 
-	// Calculate total wasted bytes
 	var wastedBytes int64
 	for _, g := range dupGroups {
 		wastedBytes += (int64(len(g.Files)) - 1) * g.Size
 	}
 
-	// Sort scanned dirs for deterministic output
 	sort.Strings(scannedDirs)
 
 	return &ScanResult{
@@ -241,11 +307,62 @@ func (s *Scanner) Scan(dirs ...string) (*ScanResult, error) {
 		DuplicateGroups: dupGroups,
 		WastedBytes:     wastedBytes,
 		ScannedDirs:     scannedDirs,
+		CacheHits:       cacheHits,
+		CacheMisses:     cacheMisses,
 	}, nil
 }
 
+// DeleteGroup removes all files in a duplicate group except the first one.
+func (r *ScanResult) DeleteGroup(index int) (int64, error) {
+	if index < 0 || index >= len(r.DuplicateGroups) {
+		return 0, fmt.Errorf("delete: invalid group index %d", index)
+	}
+	g := &r.DuplicateGroups[index]
+	if len(g.Files) < 2 {
+		return 0, nil
+	}
+
+	var deleted int64
+	for i := 1; i < len(g.Files); i++ {
+		if err := os.Remove(g.Files[i]); err == nil {
+			deleted += g.Size
+		}
+	}
+
+	g.Files = g.Files[:1]
+	r.WastedBytes -= deleted
+	return deleted, nil
+}
+
+// KeepOne removes all files in a group except the one at keepIndex.
+func (r *ScanResult) KeepOne(groupIndex, keepIndex int) (int64, error) {
+	if groupIndex < 0 || groupIndex >= len(r.DuplicateGroups) {
+		return 0, fmt.Errorf("keep: invalid group index %d", groupIndex)
+	}
+	g := &r.DuplicateGroups[groupIndex]
+	if keepIndex < 0 || keepIndex >= len(g.Files) {
+		return 0, fmt.Errorf("keep: invalid file index %d", keepIndex)
+	}
+
+	var deleted int64
+	kept := g.Files[keepIndex]
+	remaining := []string{kept}
+
+	for i, f := range g.Files {
+		if i == keepIndex {
+			continue
+		}
+		if err := os.Remove(f); err == nil {
+			deleted += g.Size
+		}
+	}
+
+	g.Files = remaining
+	r.WastedBytes -= deleted
+	return deleted, nil
+}
+
 // hashFile computes the SHA256 hex digest of a file using streaming I/O.
-// The file is never loaded entirely into memory.
 func hashFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -262,7 +379,6 @@ func hashFile(path string) (string, error) {
 }
 
 // WastedBytesTotal calculates total reclaimable bytes across all groups.
-// For each group of N identical files, (N-1) * size is wasted.
 func (r *ScanResult) WastedBytesTotal() int64 {
 	var total int64
 	for _, g := range r.DuplicateGroups {
@@ -272,38 +388,30 @@ func (r *ScanResult) WastedBytesTotal() int64 {
 }
 
 // FormatSize returns a human-readable file size string using binary units.
-// Examples: "0 B", "512 B", "1.5 KB", "23 MB", "1.2 GB"
 func FormatSize(bytes int64) string {
 	if bytes < 0 {
 		bytes = 0
 	}
-
 	const (
 		kb = 1024
 		mb = 1024 * kb
 		gb = 1024 * mb
 		tb = 1024 * gb
 	)
-
 	switch {
 	case bytes >= int64(tb):
-		val := float64(bytes) / float64(tb)
-		return formatDecimal(val) + " TB"
+		return formatDecimal(float64(bytes)/float64(tb)) + " TB"
 	case bytes >= int64(gb):
-		val := float64(bytes) / float64(gb)
-		return formatDecimal(val) + " GB"
+		return formatDecimal(float64(bytes)/float64(gb)) + " GB"
 	case bytes >= int64(mb):
-		val := float64(bytes) / float64(mb)
-		return formatDecimal(val) + " MB"
+		return formatDecimal(float64(bytes)/float64(mb)) + " MB"
 	case bytes >= int64(kb):
-		val := float64(bytes) / float64(kb)
-		return formatDecimal(val) + " KB"
+		return formatDecimal(float64(bytes)/float64(kb)) + " KB"
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
 }
 
-// formatDecimal formats a float value: one decimal place if < 10, none if >= 10.
 func formatDecimal(val float64) string {
 	if val < 10.0 {
 		return fmt.Sprintf("%.1f", val)

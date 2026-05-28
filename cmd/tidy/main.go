@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -54,6 +57,7 @@ func rootCmd() *cobra.Command {
 		newStatusCmd(),
 		newDedupCmd(),
 		newDashboardCmd(),
+		newContextMenuCmd(),
 	)
 
 	return root
@@ -409,6 +413,85 @@ func newDashboardCmd() *cobra.Command {
 	cmd.Flags().StringVar(&scanDir, "dir", "", "directory to scan for duplicates")
 
 	return cmd
+}
+
+func newContextMenuCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "context-menu",
+		Short: "Manage Windows Explorer right-click menu",
+		Long:  `Add or remove 'Organize with tidy' from the Windows Explorer right-click menu.
+Requires no admin rights (installs to HKCU).`,
+	}
+
+	cmd.AddCommand(
+		&cobra.Command{
+			Use:   "install",
+			Short: "Add tidy to Explorer right-click menu",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if runtime.GOOS != "windows" {
+					return fmt.Errorf("context-menu is only available on Windows")
+				}
+				exe, err := os.Executable()
+				if err != nil {
+					return fmt.Errorf("failed to get executable path: %w", err)
+				}
+				exe = filepath.Clean(exe)
+
+				key := `Software\Classes\Directory\Background\shell\tidy`
+				if err := setRegistryString(`HKCU\`+key, "", "Organize with tidy"); err != nil {
+					return err
+				}
+				if err := setRegistryString(`HKCU\`+key+`\command`, "", fmt.Sprintf(`"%s" organize "%%V"`, exe)); err != nil {
+					return err
+				}
+
+				fmt.Fprintf(os.Stdout, "%sContext menu installed.%s\n", colorGreen, colorReset)
+				fmt.Fprintf(os.Stdout, "%sRight-click any folder background to see 'Organize with tidy'.%s\n", colorYellow, colorReset)
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:   "uninstall",
+			Short: "Remove tidy from Explorer right-click menu",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if runtime.GOOS != "windows" {
+					return fmt.Errorf("context-menu is only available on Windows")
+				}
+				key := `HKCU\Software\Classes\Directory\Background\shell\tidy`
+				if err := deleteRegistryKey(key); err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stdout, "%sContext menu removed.%s\n", colorGreen, colorReset)
+				return nil
+			},
+		},
+	)
+
+	return cmd
+}
+
+func setRegistryString(path, name, value string) error {
+	args := []string{"add", path, "/f"}
+	if name != "" {
+		args = append(args, "/v", name)
+	} else {
+		args = append(args, "/ve")
+	}
+	args = append(args, "/t", "REG_SZ", "/d", value)
+	return execReg(args)
+}
+
+func deleteRegistryKey(path string) error {
+	return execReg([]string{"delete", path, "/f"})
+}
+
+func execReg(args []string) error {
+	cmd := exec.Command("reg", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // --- helpers -----------------------------------------------------------------
