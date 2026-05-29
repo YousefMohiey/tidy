@@ -834,11 +834,11 @@ func (m model) installContextMenu() (tea.Model, tea.Cmd) {
 
 	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy`, "", "Organize with tidy")
 	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy`, "Icon", iconPath)
-	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy\command`, "", `"`+exe+`" organize "%V"`)
+	_ = registryWriteString(`Software\Classes\Directory\Background\shell\tidy\command`, "", `cmd.exe /k ""`+exe+`"" organize ""%V""`)
 
 	_ = registryWriteString(`Software\Classes\Directory\shell\tidy`, "", "Organize with tidy")
 	_ = registryWriteString(`Software\Classes\Directory\shell\tidy`, "Icon", iconPath)
-	_ = registryWriteString(`Software\Classes\Directory\shell\tidy\command`, "", `"`+exe+`" organize "%1"`)
+	_ = registryWriteString(`Software\Classes\Directory\shell\tidy\command`, "", `cmd.exe /k ""`+exe+`"" organize ""%1""`)
 
 	m.status = "Context menu installed"
 	m.statusStyle = successStyle

@@ -42,7 +42,7 @@ ShowUnInstDetails nevershow
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
-Page custom ContextMenuPage ContextMenuPageLeave
+Page custom FeaturesPage FeaturesPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch tidy"
@@ -64,11 +64,13 @@ VIAddVersionKey "FileDescription" "${PRODUCT_NAME} Installer"
 VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
 
-; --- Context Menu Custom Page ---
+; --- Features Custom Page ---
+Var DesktopCheckbox
+Var DesktopState
 Var ContextMenuCheckbox
 Var ContextMenuState
 
-Function ContextMenuPage
+Function FeaturesPage
   nsDialogs::Create 1018
   Pop $0
 
@@ -76,17 +78,26 @@ Function ContextMenuPage
     Abort
   ${EndIf}
 
-  !insertmacro MUI_HEADER_TEXT "Context Menu Integration" "Add 'Organize with tidy' to the right-click menu?"
-  ${NSD_CreateLabel} 0 0 100% 30u "Would you like to add 'Organize with tidy' to the Windows Explorer right-click menu? It lets you organize any folder by right-clicking it."
+  !insertmacro MUI_HEADER_TEXT "Choose Features" "Select additional options for tidy."
+  ${NSD_CreateLabel} 0 0 100% 20u "Select the features you want to enable:"
   Pop $0
-  ${NSD_CreateCheckbox} 0 40u 100% 15u "Add 'Organize with tidy' to right-click menu"
+
+  ${NSD_CreateCheckbox} 0 30u 100% 15u "Create a desktop shortcut"
+  Pop $DesktopCheckbox
+  ${NSD_Check} $DesktopCheckbox
+
+  ${NSD_CreateCheckbox} 0 55u 100% 15u "Add 'Organize with tidy' to the right-click menu"
   Pop $ContextMenuCheckbox
   ${NSD_Check} $ContextMenuCheckbox
+
+  ${NSD_CreateLabel} 0 85u 100% 40u "The context menu lets you organize any folder by right-clicking it.$\nThe desktop shortcut provides quick access to the tidy dashboard."
+  Pop $0
 
   nsDialogs::Show
 FunctionEnd
 
-Function ContextMenuPageLeave
+Function FeaturesPageLeave
+  ${NSD_GetState} $DesktopCheckbox $DesktopState
   ${NSD_GetState} $ContextMenuCheckbox $ContextMenuState
 FunctionEnd
 
@@ -127,25 +138,27 @@ Section "Install" SecInstall
   ; Add install directory to user PATH
   Call AddToPath
 
-  ; Create Start Menu shortcut with icon
+  ; Create Start Menu shortcut with icon (opens in terminal)
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\${PRODUCT_ICON}" 0
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "cmd.exe" '/k "$INSTDIR\${PRODUCT_EXE}"' "$INSTDIR\${PRODUCT_ICON}" 0
   CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "" 0
 
-  ; Create Desktop shortcut with icon
-  CreateShortcut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\${PRODUCT_ICON}" 0
+  ; Create Desktop shortcut with icon (opens in terminal)
+  ${If} $DesktopState == 1
+    CreateShortcut "$DESKTOP\${PRODUCT_NAME}.lnk" "cmd.exe" '/k "$INSTDIR\${PRODUCT_EXE}"' "$INSTDIR\${PRODUCT_ICON}" 0
+  ${EndIf}
 
   ; Context Menu Registration (if user opted in)
   ${If} $ContextMenuState == 1
     ; Directory background (right-click in empty folder space)
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy" "" "Organize with tidy"
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy" "Icon" "$INSTDIR\${PRODUCT_ICON}"
-    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy\command" "" '"$INSTDIR\${PRODUCT_EXE}" organize "%V"'
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\tidy\command" "" 'cmd.exe /k ""$INSTDIR\${PRODUCT_EXE}"" organize ""%V""'
 
     ; Directory (right-click on folder icon)
     WriteRegStr HKCU "Software\Classes\Directory\shell\tidy" "" "Organize with tidy"
     WriteRegStr HKCU "Software\Classes\Directory\shell\tidy" "Icon" "$INSTDIR\${PRODUCT_ICON}"
-    WriteRegStr HKCU "Software\Classes\Directory\shell\tidy\command" "" '"$INSTDIR\${PRODUCT_EXE}" organize "%1"'
+    WriteRegStr HKCU "Software\Classes\Directory\shell\tidy\command" "" 'cmd.exe /k ""$INSTDIR\${PRODUCT_EXE}"" organize ""%1""'
   ${EndIf}
 
   ; Strip Mark-of-the-Web
