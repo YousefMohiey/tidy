@@ -19,7 +19,7 @@ type MoveRecord struct {
 // Journal tracks a batch of move operations for undo capability.
 type Journal struct {
 	Operations []MoveRecord `json:"operations"`
-	Timestamp  time.Time    `json:"timestamp"` // when the batch started
+	Timestamp  time.Time    `json:"timestamp"`
 	SourceDir  string       `json:"source_dir"`
 }
 
@@ -60,14 +60,17 @@ func (j *Journal) Save(path string) error {
 	return nil
 }
 
-// Append loads an existing journal and appends the current operations to it,
-// then saves. If no journal exists, falls back to Save.
+// Append loads existing journal (if any), appends new operations, and saves.
 func (j *Journal) Append(path string) error {
 	existing, err := LoadJournal(path)
-	if err == nil && existing != nil && existing.SourceDir == j.SourceDir {
-		existing.Operations = append(existing.Operations, j.Operations...)
-		return existing.Save(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
 	}
+
+	if existing != nil {
+		j.Operations = append(existing.Operations, j.Operations...)
+	}
+
 	return j.Save(path)
 }
 
@@ -89,7 +92,6 @@ func LoadJournal(path string) (*Journal, error) {
 // Undo reverses all operations in the journal (moves files back).
 // Iterates in reverse order. Missing files are skipped gracefully.
 // If the source path already exists, the file is skipped to prevent duplication.
-// Returns the number of files successfully restored and any fatal error.
 func (j *Journal) Undo() (int, error) {
 	restored := 0
 	var errs []error
@@ -109,31 +111,6 @@ func (j *Journal) Undo() (int, error) {
 			continue
 		}
 
-		srcDir := filepath.Dir(op.Source)
-		if err := os.MkdirAll(srcDir, 0o755); err != nil {
-			errs = append(errs, fmt.Errorf("undo: mkdir %q: %w", srcDir, err))
-			continue
-		}
-
-		if err := os.Rename(op.Destination, op.Source); err != nil {
-			errs = append(errs, fmt.Errorf("undo: move %q → %q: %w", op.Destination, op.Source, err))
-			continue
-		}
-
-		restored++
-	}
-
-	if len(errs) > 0 {
-		return restored, fmt.Errorf("undo: %d operation(s) failed: %w", len(errs), errs[0])
-	}
-
-	return restored, nil
-}
-			errs = append(errs, fmt.Errorf("undo: stat %q: %w", op.Destination, err))
-			continue
-		}
-
-		// Ensure the source directory exists.
 		srcDir := filepath.Dir(op.Source)
 		if err := os.MkdirAll(srcDir, 0o755); err != nil {
 			errs = append(errs, fmt.Errorf("undo: mkdir %q: %w", srcDir, err))

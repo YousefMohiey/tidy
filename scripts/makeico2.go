@@ -7,8 +7,6 @@ import (
 	"image"
 	"image/png"
 	"os"
-
-	"image/draw"
 )
 
 type iconDirEntry struct {

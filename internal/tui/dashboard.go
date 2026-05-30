@@ -694,30 +694,11 @@ func (m model) runOrganize(dryRun bool) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		opts := organizer.Options{
 			DryRun: dryRun,
+			OnProgress: func(p organizer.Progress) {
+				// Bubble Tea doesn't support sending msgs from callbacks easily,
+				// so we just store progress in the result.
+			},
 		}
-		org := organizer.New(cfg, opts)
-		result, err := org.Organize(dir)
-		return organizeResultMsg{result: result, err: err, dryRun: dryRun}
-	}
-}
-
-func (m model) runDedupScan() (tea.Model, tea.Cmd) {
-	if m.data.SourceDir == "" {
-		m.status = "Error: no source directory set (press e to set)"
-		m.statusStyle = errorStyle
-		return m, nil
-	}
-
-	m.status = "Scanning for duplicates..."
-	m.statusStyle = accentStyle
-
-	dir := m.data.SourceDir
-	return m, func() tea.Msg {
-		scanner := dedup.NewScanner()
-		result, err := scanner.Scan(dir)
-		return dedupResultMsg{result: result, err: err}
-	}
-}
 		org := organizer.New(cfg, opts)
 		result, err := org.Organize(dir)
 		return organizeResultMsg{result: result, err: err, dryRun: dryRun}
@@ -818,7 +799,7 @@ func (m model) toggleContextMenu() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.contextMenuState {
+	if m.contextMenuInstalled() {
 		m.confirming = true
 		m.confirmAction = "remove-context-menu"
 		m.confirmMsg = "Remove 'Organize with tidy' from right-click menu?"
@@ -832,14 +813,7 @@ func (m model) toggleContextMenu() (tea.Model, tea.Cmd) {
 }
 
 func (m model) contextMenuInstalled() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	cmd := exec.Command("reg", "query", "HKCU\\Software\\Classes\\Directory\\Background\\shell\\tidy")
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	err := cmd.Run()
-	return err == nil
+	return m.contextMenuState
 }
 
 func (m model) installContextMenu() (tea.Model, tea.Cmd) {
@@ -922,7 +896,7 @@ func (m model) View() string {
 		innerWidth = 40
 	}
 
-	contentHeight := m.height - 6
+	contentHeight := m.height - 5
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -967,6 +941,8 @@ func (m model) View() string {
 	var sb strings.Builder
 	b := borderStyle
 	ruler := strings.Repeat("─", innerWidth)
+
+	sb.WriteString("\x1b[2J\x1b[H")
 
 	sb.WriteString(b.Render("╭" + ruler + "╮"))
 	sb.WriteByte('\n')
@@ -1232,15 +1208,6 @@ func (m model) homeLines(width int) []string {
 	}
 
 	lines = append(lines, "")
-
-	if m.data.Config != nil && m.data.SourceDir != "" && m.treePreview == nil {
-		if cfg := m.data.Config; cfg != nil {
-			org := organizer.New(cfg, organizer.Options{DryRun: true})
-			if preview, err := org.PreviewTree(m.data.SourceDir); err == nil {
-				m.treePreview = preview
-			}
-		}
-	}
 
 	if m.treePreview != nil {
 		lines = append(lines, m.renderTreePreview(width)...)
