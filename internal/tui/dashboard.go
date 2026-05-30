@@ -694,11 +694,30 @@ func (m model) runOrganize(dryRun bool) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		opts := organizer.Options{
 			DryRun: dryRun,
-			OnProgress: func(p organizer.Progress) {
-				// Bubble Tea doesn't support sending msgs from callbacks easily,
-				// so we just store progress in the result.
-			},
 		}
+		org := organizer.New(cfg, opts)
+		result, err := org.Organize(dir)
+		return organizeResultMsg{result: result, err: err, dryRun: dryRun}
+	}
+}
+
+func (m model) runDedupScan() (tea.Model, tea.Cmd) {
+	if m.data.SourceDir == "" {
+		m.status = "Error: no source directory set (press e to set)"
+		m.statusStyle = errorStyle
+		return m, nil
+	}
+
+	m.status = "Scanning for duplicates..."
+	m.statusStyle = accentStyle
+
+	dir := m.data.SourceDir
+	return m, func() tea.Msg {
+		scanner := dedup.NewScanner()
+		result, err := scanner.Scan(dir)
+		return dedupResultMsg{result: result, err: err}
+	}
+}
 		org := organizer.New(cfg, opts)
 		result, err := org.Organize(dir)
 		return organizeResultMsg{result: result, err: err, dryRun: dryRun}
@@ -1213,6 +1232,15 @@ func (m model) homeLines(width int) []string {
 	}
 
 	lines = append(lines, "")
+
+	if m.data.Config != nil && m.data.SourceDir != "" && m.treePreview == nil {
+		if cfg := m.data.Config; cfg != nil {
+			org := organizer.New(cfg, organizer.Options{DryRun: true})
+			if preview, err := org.PreviewTree(m.data.SourceDir); err == nil {
+				m.treePreview = preview
+			}
+		}
+	}
 
 	if m.treePreview != nil {
 		lines = append(lines, m.renderTreePreview(width)...)
