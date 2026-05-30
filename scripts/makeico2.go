@@ -8,7 +8,7 @@ import (
 	"image/png"
 	"os"
 
-	"golang.org/x/image/draw"
+	"image/draw"
 )
 
 type iconDirEntry struct {
@@ -46,9 +46,15 @@ func main() {
 	var images [][]byte
 
 	for _, size := range sizes {
-		// Scale down using high-quality Lanczos resampling
-		dst := image.NewRGBA(image.Rect(0, 0, size, size))
-		draw.CatmullRom.Scale(dst, dst.Rect, src, src.Bounds(), draw.Over, nil)
+	// Scale down using nearest-neighbor (standard library)
+	dst := image.NewRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			sx := x * src.Bounds().Dx() / size
+			sy := y * src.Bounds().Dy() / size
+			dst.Set(x, y, src.At(src.Bounds().Min.X+sx, src.Bounds().Min.Y+sy))
+		}
+	}
 
 		var buf bytes.Buffer
 		encoder := png.Encoder{CompressionLevel: png.BestCompression}
