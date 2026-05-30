@@ -125,6 +125,7 @@ type model struct {
 	dupSelectedGrp  int
 	dupSelectedFile int
 	dupMode         string
+	contextMenuState bool
 }
 
 func newModel(data DashboardData) model {
@@ -138,6 +139,7 @@ func newModel(data DashboardData) model {
 			m.data.SourceDir = wd
 		}
 	}
+	m.contextMenuState = m.contextMenuInstalled()
 	return m
 }
 
@@ -797,7 +799,7 @@ func (m model) toggleContextMenu() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.contextMenuInstalled() {
+	if m.contextMenuState {
 		m.confirming = true
 		m.confirmAction = "remove-context-menu"
 		m.confirmMsg = "Remove 'Organize with tidy' from right-click menu?"
@@ -815,6 +817,8 @@ func (m model) contextMenuInstalled() bool {
 		return false
 	}
 	cmd := exec.Command("reg", "query", "HKCU\\Software\\Classes\\Directory\\Background\\shell\\tidy")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 	err := cmd.Run()
 	return err == nil
 }
@@ -840,6 +844,7 @@ func (m model) installContextMenu() (tea.Model, tea.Cmd) {
 	_ = registryWriteString(`Software\Classes\Directory\shell\tidy`, "Icon", iconPath)
 	_ = registryWriteString(`Software\Classes\Directory\shell\tidy\command`, "", `cmd.exe /k ""`+exe+`"" organize ""%1""`)
 
+	m.contextMenuState = true
 	m.status = "Context menu installed"
 	m.statusStyle = successStyle
 	return m, nil
@@ -851,6 +856,7 @@ func (m model) removeContextMenu() (tea.Model, tea.Cmd) {
 	}
 	_ = registryDeleteKey(`Software\Classes\Directory\Background\shell\tidy`)
 	_ = registryDeleteKey(`Software\Classes\Directory\shell\tidy`)
+	m.contextMenuState = false
 	m.status = "Context menu removed"
 	m.statusStyle = successStyle
 	return m, nil
@@ -942,8 +948,6 @@ func (m model) View() string {
 	var sb strings.Builder
 	b := borderStyle
 	ruler := strings.Repeat("─", innerWidth)
-
-	sb.WriteString("\x1b[2J\x1b[H")
 
 	sb.WriteString(b.Render("╭" + ruler + "╮"))
 	sb.WriteByte('\n')

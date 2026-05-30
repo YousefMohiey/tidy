@@ -170,7 +170,7 @@ func (o *Organizer) Organize(dir string) (*Result, error) {
 
 	if !o.options.DryRun && len(journal.Operations) > 0 {
 		journalPath := filepath.Join(o.options.JournalDir, "journal.json")
-		if err := journal.Append(journalPath); err != nil {
+		if err := journal.Save(journalPath); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("save journal: %w", err))
 		}
 		_ = backupJournal(journalPath)

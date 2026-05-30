@@ -88,6 +88,7 @@ func LoadJournal(path string) (*Journal, error) {
 
 // Undo reverses all operations in the journal (moves files back).
 // Iterates in reverse order. Missing files are skipped gracefully.
+// If the source path already exists, the file is skipped to prevent duplication.
 // Returns the number of files successfully restored and any fatal error.
 func (j *Journal) Undo() (int, error) {
 	restored := 0
@@ -98,9 +99,36 @@ func (j *Journal) Undo() (int, error) {
 
 		if _, err := os.Lstat(op.Destination); err != nil {
 			if os.IsNotExist(err) {
-				// File already gone — skip silently.
 				continue
 			}
+			errs = append(errs, fmt.Errorf("undo: stat %q: %w", op.Destination, err))
+			continue
+		}
+
+		if _, err := os.Lstat(op.Source); err == nil {
+			continue
+		}
+
+		srcDir := filepath.Dir(op.Source)
+		if err := os.MkdirAll(srcDir, 0o755); err != nil {
+			errs = append(errs, fmt.Errorf("undo: mkdir %q: %w", srcDir, err))
+			continue
+		}
+
+		if err := os.Rename(op.Destination, op.Source); err != nil {
+			errs = append(errs, fmt.Errorf("undo: move %q → %q: %w", op.Destination, op.Source, err))
+			continue
+		}
+
+		restored++
+	}
+
+	if len(errs) > 0 {
+		return restored, fmt.Errorf("undo: %d operation(s) failed: %w", len(errs), errs[0])
+	}
+
+	return restored, nil
+}
 			errs = append(errs, fmt.Errorf("undo: stat %q: %w", op.Destination, err))
 			continue
 		}
