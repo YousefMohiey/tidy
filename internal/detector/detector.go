@@ -4,6 +4,7 @@ package detector
 
 import (
 	"fmt"
+	"mime"
 	"path/filepath"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -36,10 +37,5 @@ func DetectByExtension(filePath string) string {
 		return ""
 	}
 
-	mime := mimetype.Lookup(ext)
-	if mime == nil {
-		return ""
-	}
-
-	return mime.String()
+	return mime.TypeByExtension(ext)
 }
