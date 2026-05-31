@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/verhafter/tidy/internal/config"
-	"github.com/verhafter/tidy/internal/detector"
-	"github.com/verhafter/tidy/internal/paths"
-	"github.com/verhafter/tidy/internal/rules"
+	"github.com/YousefMohiey/tidy/internal/config"
+	"github.com/YousefMohiey/tidy/internal/detector"
+	"github.com/YousefMohiey/tidy/internal/paths"
+	"github.com/YousefMohiey/tidy/internal/rules"
 )
 
 // Options controls organizer behavior.
@@ -225,18 +225,20 @@ func (o *Organizer) processFile(dir string, c fileCandidate, journal *Journal, r
 	destDir := filepath.Join(dir, destSubdir)
 	destPath := o.resolveDestination(srcPath, destDir)
 
-	record := MoveRecord{
-		Source:      srcPath,
-		Destination: destPath,
-		Category:    category,
+	var fileSize int64
+	if info, err := c.entry.Info(); err == nil {
+		fileSize = info.Size()
 	}
-
-	mu.Lock()
-	result.Moves = append(result.Moves, record)
-	mu.Unlock()
 
 	if o.options.DryRun {
 		mu.Lock()
+		result.Moves = append(result.Moves, MoveRecord{
+			Source:      srcPath,
+			Destination: destPath,
+			Category:    category,
+			Size:        fileSize,
+			Timestamp:   time.Now(),
+		})
 		result.FilesMoved++
 		mu.Unlock()
 		return
@@ -259,7 +261,14 @@ func (o *Organizer) processFile(dir string, c fileCandidate, journal *Journal, r
 	}
 
 	mu.Lock()
-	journal.Record(srcPath, destPath)
+	journal.Record(srcPath, destPath, category, fileSize)
+	result.Moves = append(result.Moves, MoveRecord{
+		Source:      srcPath,
+		Destination: destPath,
+		Category:    category,
+		Size:        fileSize,
+		Timestamp:   time.Now(),
+	})
 	result.FilesMoved++
 	mu.Unlock()
 

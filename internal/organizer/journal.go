@@ -13,6 +13,7 @@ type MoveRecord struct {
 	Source      string    `json:"source"`
 	Destination string    `json:"destination"`
 	Category    string    `json:"category"`
+	Size        int64     `json:"size"`
 	Timestamp   time.Time `json:"timestamp"`
 }
 
@@ -33,10 +34,12 @@ func NewJournal(sourceDir string) *Journal {
 }
 
 // Record adds a move record to the journal.
-func (j *Journal) Record(src, dst string) {
+func (j *Journal) Record(src, dst string, category string, size int64) {
 	j.Operations = append(j.Operations, MoveRecord{
 		Source:      src,
 		Destination: dst,
+		Category:    category,
+		Size:        size,
 		Timestamp:   time.Now(),
 	})
 }
