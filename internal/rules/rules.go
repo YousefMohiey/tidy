@@ -4,7 +4,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/verhafter/tidy/internal/config"
+	"github.com/YousefMohiey/tidy/internal/config"
 )
 
 // MatchResult holds the outcome of a successful rule match.

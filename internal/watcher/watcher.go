@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/verhafter/tidy/internal/config"
-	"github.com/verhafter/tidy/internal/organizer"
+	"github.com/YousefMohiey/tidy/internal/config"
+	"github.com/YousefMohiey/tidy/internal/organizer"
 )
 
 // debounceDelay is the quiet period before a file is considered fully written.

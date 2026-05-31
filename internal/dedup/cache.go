@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/verhafter/tidy/internal/paths"
+	"github.com/YousefMohiey/tidy/internal/paths"
 )
 
 // CacheEntry stores the hash and metadata for a single file.

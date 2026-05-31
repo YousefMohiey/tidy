@@ -13,12 +13,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/verhafter/tidy/internal/config"
-	"github.com/verhafter/tidy/internal/dedup"
-	"github.com/verhafter/tidy/internal/organizer"
-	"github.com/verhafter/tidy/internal/paths"
-	"github.com/verhafter/tidy/internal/tui"
-	"github.com/verhafter/tidy/internal/watcher"
+	"github.com/YousefMohiey/tidy/internal/config"
+	"github.com/YousefMohiey/tidy/internal/dedup"
+	"github.com/YousefMohiey/tidy/internal/organizer"
+	"github.com/YousefMohiey/tidy/internal/paths"
+	"github.com/YousefMohiey/tidy/internal/tui"
+	"github.com/YousefMohiey/tidy/internal/watcher"
 )
 
 // ANSI color codes for terminal output.
