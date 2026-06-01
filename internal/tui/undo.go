@@ -43,8 +43,12 @@ func (m model) handleDetailsKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		if m.undoSelected < len(m.undoHistory) {
-			return m.runUndoEntry(m.undoSelected)
+			entry := m.undoHistory[m.undoSelected]
+			m.confirming = true
+			m.confirmMsg = fmt.Sprintf("Undo %d files from %s?", entry.FilesMoved, filepath.Base(entry.SourceDir))
+			m.confirmAction = "undo-entry"
 		}
+		return m, nil
 	}
 	return m.handleScrollKey(key)
 }
@@ -73,29 +77,28 @@ func (m model) runUndoEntry(idx int) (tea.Model, tea.Cmd) {
 func (m model) requestUndo() (tea.Model, tea.Cmd) {
 	if m.data.Journal == nil {
 		m.status = "No operations to undo"
-		m.statusStyle = mutedStyle
+		m.statusStyle = errorStyle
 		return m, nil
 	}
-
-	opCount := len(m.data.Journal.Operations)
 	m.confirming = true
+	m.confirmMsg = fmt.Sprintf("Undo %d files from %s?", len(m.data.Journal.Operations), filepath.Base(m.data.Journal.SourceDir))
 	m.confirmAction = "undo"
-	m.confirmMsg = fmt.Sprintf("Undo last operation? (%d files will be moved back)", opCount)
 	return m, nil
 }
 
-func (m model) runUndo() (tea.Model, tea.Cmd) {
-	m.status = "Undoing..."
+func (m model) runUndoLast() (tea.Model, tea.Cmd) {
+	m.status = "Undoing last operation..."
 	m.statusStyle = accentStyle
 
-	journal := m.data.Journal
+	journalPath := paths.JournalPath()
 	return m, func() tea.Msg {
+		journal, err := organizer.LoadJournal(journalPath)
+		if err != nil {
+			return undoResultMsg{err: err}
+		}
 		restored, err := journal.Undo()
 		if err == nil {
-			jPath := paths.JournalPath()
-			if jPath != "" {
-				_ = os.Remove(jPath)
-			}
+			_ = os.Remove(journalPath)
 		}
 		return undoResultMsg{restored: restored, err: err}
 	}
@@ -118,39 +121,57 @@ func (m *model) reloadJournal() {
 func (m model) detailsLines(width int) []string {
 	var lines []string
 
-	lines = append(lines,
-		"  "+secondaryStyle.Render("Undo History"),
-		"  "+mutedStyle.Render("Press Enter on an entry to undo that operation"),
-		"",
-	)
-
 	if len(m.undoHistory) == 0 {
-		lines = append(lines, "  "+mutedStyle.Render("No operations to undo."))
+		lines = append(lines,
+			"",
+			"  "+mutedStyle.Render("No operations recorded yet."),
+			"  "+mutedStyle.Render("Operations will appear here after organizing files."),
+		)
 		return lines
 	}
 
+	lines = append(lines, "")
+	lines = append(lines, "  "+titleStyle.Render("Recent Operations"))
+	lines = append(lines, "")
+
 	for i, entry := range m.undoHistory {
 		indicator := "  "
-		var styled string
-		timeStr := formatRelativeTime(entry.Timestamp)
-		summary := fmt.Sprintf("%s — %d files", timeStr, entry.FilesMoved)
+		timeStr := relativeTime(entry.Timestamp)
+		summary := fmt.Sprintf("%s — %d files from %s", timeStr, entry.FilesMoved, truncateMiddle(entry.SourceDir, 40))
 
 		if i == m.undoSelected {
 			indicator = accentStyle.Render("> ")
-			styled = accentStyle.Render(summary)
-		} else {
-			styled = valueStyle.Render(summary)
-		}
+			lines = append(lines, indicator+accentStyle.Render(summary))
 
-		undoHint := mutedStyle.Render("(undo)")
-		line := indicator + styled + " " + undoHint
-		lines = append(lines, line)
+			if journal, err := organizer.LoadJournal(entry.JournalPath); err == nil && len(journal.Operations) > 0 {
+				cats := make(map[string]int)
+				for _, op := range journal.Operations {
+					cat := op.Category
+					if cat == "" {
+						cat = "Other"
+					}
+					cats[cat]++
+				}
+				var parts []string
+				for cat, count := range cats {
+					parts = append(parts, fmt.Sprintf("%s: %d", cat, count))
+				}
+				sort.Strings(parts)
+				catLine := "      " + mutedStyle.Render(strings.Join(parts, "  "))
+				lines = append(lines, catLine)
+			}
+
+			undoHint := "      " + mutedStyle.Render("[enter] undo this operation")
+			lines = append(lines, undoHint)
+		} else {
+			lines = append(lines, indicator+valueStyle.Render(summary))
+		}
 	}
 
 	return lines
 }
 
-func formatRelativeTime(t time.Time) string {
+func relativeTime(t time.Time) string {
 	now := time.Now()
 	diff := now.Sub(t)
 
