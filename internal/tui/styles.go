@@ -26,4 +26,6 @@ var (
 	borderStyle      = lipgloss.NewStyle().Foreground(colorBorder)
 	successStyle     = lipgloss.NewStyle().Foreground(colorSuccess)
 	errorStyle       = lipgloss.NewStyle().Foreground(colorError)
+	cursorStyle      = lipgloss.NewStyle().Reverse(true)
+	hintStyle        = lipgloss.NewStyle().Foreground(colorMuted).Italic(true)
 )

@@ -56,6 +56,7 @@ type model struct {
 	browseScroll     int
 	typingPath       bool
 	pathInput        string
+	pathCursor       int
 	confirming       bool
 	confirmMsg       string
 	confirmAction    string
@@ -286,13 +287,16 @@ func (m model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 		action := m.confirmAction
 		m.confirmAction = ""
 		if action == "undo" {
-			return m.runUndo()
+			return m.runUndoLast()
 		}
 		if action == "install-context-menu" {
 			return m.installContextMenu()
 		}
 		if action == "remove-context-menu" {
 			return m.removeContextMenu()
+		}
+		if action == "undo-entry" {
+			return m.runUndoEntry(m.undoSelected)
 		}
 	case "n", "N", "esc":
 		m.confirming = false
@@ -354,7 +358,7 @@ func (m model) View() string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, m.renderFooter())
+	lines = append(lines, m.keyHints())
 
 	maxScroll := len(lines) - contentHeight
 	if maxScroll < 0 {
@@ -447,69 +451,36 @@ func (m model) renderStatusBar(width int) string {
 	return statusLabel + statusVal
 }
 
-func (m model) renderFooter() string {
-	if m.browsingDir {
-		hints := []string{
-			mutedStyle.Render("j/k") + valueStyle.Render(": navigate"),
-			mutedStyle.Render("enter") + valueStyle.Render(": open"),
-			mutedStyle.Render("s") + valueStyle.Render(": select"),
-			mutedStyle.Render("backspace") + valueStyle.Render(": up"),
-			mutedStyle.Render("esc") + valueStyle.Render(": cancel"),
-		}
-		return "  " + strings.Join(hints, "  ")
-	}
+func (m model) keyHints() string {
 	if m.confirming {
-		hints := []string{
-			mutedStyle.Render("y") + valueStyle.Render(": confirm"),
-			mutedStyle.Render("n/esc") + valueStyle.Render(": cancel"),
-		}
-		return "  " + strings.Join(hints, "  ")
+		return "  " + mutedStyle.Render("y confirm  n cancel")
 	}
-	if m.activeTab == 2 && m.dupMode != "" {
-		hints := []string{
-			mutedStyle.Render("j/k") + valueStyle.Render(": navigate"),
-			mutedStyle.Render("enter") + valueStyle.Render(": select"),
-			mutedStyle.Render("D") + valueStyle.Render(": delete group"),
-			mutedStyle.Render("esc") + valueStyle.Render(": back"),
-		}
-		return "  " + strings.Join(hints, "  ")
+	if m.typingPath {
+		return "  " + mutedStyle.Render("\u2190\u2192 move cursor  \u23ce confirm  esc cancel")
 	}
-
-	var hints []string
-	hints = append(hints, mutedStyle.Render("1-4")+valueStyle.Render(": tabs"))
-
+	if m.browsingDir {
+		return "  " + mutedStyle.Render("\u2191\u2193 navigate  \u23ce select  g type path  esc cancel")
+	}
+	if m.showingPreview {
+		return "  " + mutedStyle.Render("\u23ce organize  esc back")
+	}
+	if m.dupMode == "select" {
+		return "  " + mutedStyle.Render("\u2191\u2193 select  \u23ce open  D delete all  esc back")
+	}
+	if m.dupMode == "file" {
+		return "  " + mutedStyle.Render("\u2191\u2193 select  \u23ce keep this  esc back")
+	}
 	switch m.activeTab {
 	case 0:
-		hints = append(hints,
-			mutedStyle.Render("enter")+valueStyle.Render(": select"),
-			mutedStyle.Render("e")+valueStyle.Render(": browse dir"),
-		)
+		return "  " + mutedStyle.Render("\u2191\u2193 navigate  \u23ce execute  e set dir  q quit")
 	case 1:
-		hints = append(hints, mutedStyle.Render("j/k")+valueStyle.Render(": scroll"))
+		return "  " + mutedStyle.Render("\u2191\u2193 scroll  tab switch")
 	case 2:
-		if m.data.DedupScan != nil && len(m.data.DedupScan.DuplicateGroups) > 0 {
-			hints = append(hints,
-				mutedStyle.Render("enter")+valueStyle.Render(": resolve"),
-				mutedStyle.Render("d")+valueStyle.Render(": re-scan"),
-				mutedStyle.Render("j/k")+valueStyle.Render(": scroll"),
-			)
-		} else {
-			hints = append(hints,
-				mutedStyle.Render("d")+valueStyle.Render(": scan"),
-				mutedStyle.Render("j/k")+valueStyle.Render(": scroll"),
-			)
-		}
+		return "  " + mutedStyle.Render("d scan  \u2191\u2193 select  tab switch")
 	case 3:
-		if len(m.undoHistory) > 0 {
-			hints = append(hints,
-				mutedStyle.Render("j/k")+valueStyle.Render(": navigate"),
-				mutedStyle.Render("enter")+valueStyle.Render(": undo"),
-			)
-		}
+		return "  " + mutedStyle.Render("\u2191\u2193 select  \u23ce undo  tab switch")
 	}
-
-	hints = append(hints, mutedStyle.Render("q")+valueStyle.Render(": quit"))
-	return "  " + strings.Join(hints, "  ")
+	return ""
 }
 
 func (m model) tabContent(width int) []string {

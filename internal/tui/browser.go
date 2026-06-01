@@ -18,6 +18,7 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 	case "g":
 		m.typingPath = true
 		m.pathInput = m.browsePath
+		m.pathCursor = len(m.pathInput)
 		return m, nil
 	case "up", "k":
 		if m.browseSelected > 0 {
@@ -102,23 +103,44 @@ func (m model) handlePathInputKey(key string) (tea.Model, tea.Cmd) {
 		}
 		m.typingPath = false
 		m.pathInput = ""
+		m.pathCursor = 0
 		return m, nil
 	case "esc":
 		m.typingPath = false
 		m.pathInput = ""
+		m.pathCursor = 0
+		return m, nil
+	case "left":
+		if m.pathCursor > 0 {
+			m.pathCursor--
+		}
+		return m, nil
+	case "right":
+		if m.pathCursor < len(m.pathInput) {
+			m.pathCursor++
+		}
+		return m, nil
+	case "home":
+		m.pathCursor = 0
+		return m, nil
+	case "end":
+		m.pathCursor = len(m.pathInput)
 		return m, nil
 	case "backspace":
-		if len(m.pathInput) > 0 {
-			m.pathInput = m.pathInput[:len(m.pathInput)-1]
+		if m.pathCursor > 0 {
+			m.pathInput = m.pathInput[:m.pathCursor-1] + m.pathInput[m.pathCursor:]
+			m.pathCursor--
 		}
 		return m, nil
 	case "ctrl+u":
 		m.pathInput = ""
+		m.pathCursor = 0
 		return m, nil
 	default:
 		for _, r := range key {
 			if r >= 32 && r < 127 {
-				m.pathInput += string(r)
+				m.pathInput = m.pathInput[:m.pathCursor] + string(r) + m.pathInput[m.pathCursor:]
+				m.pathCursor++
 			}
 		}
 		return m, nil
