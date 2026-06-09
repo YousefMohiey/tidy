@@ -20,6 +20,8 @@ echo "  ✓ tidy-linux-amd64 (static)"
 
 (
     cd cmd/tidy
+    # Prevent stale icon embedding in Windows builds
+    rm -f resource.syso
     MAJOR=0; MINOR=0; PATCH=0
     if [[ "$CLEAN_VER" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
         MAJOR="${BASH_REMATCH[1]}"; MINOR="${BASH_REMATCH[2]}"; PATCH="${BASH_REMATCH[3]}"
