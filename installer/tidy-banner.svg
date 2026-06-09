@@ -47,6 +47,6 @@ iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAABr3ElEQVR4nO19aYBlV1Xut9Y+91Z1dfXc
     Organize files by content, not just extension
   </text>
   
-  <!-- Single accent line -->
+  <!-- Simple accent line -->
   <rect x="240" y="260" width="180" height="2" fill="#9b59b6" rx="1" ry="1"/>
 </svg>
