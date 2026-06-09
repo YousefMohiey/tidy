@@ -158,20 +158,20 @@ func formatMoves(moves []organizer.MoveRecord, sourceDir string) []string {
 				dst = rel
 			}
 		}
-		if len(src) > maxSrcLen {
-			maxSrcLen = len(src)
+		if rLen := len([]rune(src)); rLen > maxSrcLen {
+			maxSrcLen = rLen
 		}
 		entries = append(entries, moveEntry{srcName: src, dstName: dst})
 	}
 
-	if maxSrcLen > 30 {
-		maxSrcLen = 30
-	}
+		if maxSrcLen > 30 {
+			maxSrcLen = 30
+		}
 
 	result := make([]string, 0, len(entries))
 	for _, e := range entries {
 		srcName := e.srcName
-		if len(srcName) > 30 {
+		if len([]rune(srcName)) > 30 {
 			srcName = truncateMiddle(srcName, 30)
 		}
 		line := fmt.Sprintf("%-*s", maxSrcLen, srcName) +

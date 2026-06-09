@@ -79,7 +79,7 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 			m.browseScroll = 0
 		}
 		return m, nil
-	case "s", "ctrl+s":
+	case "s":
 		m.data.SourceDir = m.browsePath
 		m.browsingDir = false
 		m.treePreview = nil

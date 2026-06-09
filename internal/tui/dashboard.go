@@ -559,18 +559,19 @@ func padLine(s string, width int) string {
 }
 
 func truncateMiddle(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
 	if maxLen < 5 {
 		if maxLen <= 0 {
 			return ""
 		}
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	ellipsis := "..."
+	ellipsis := []rune("...")
 	remaining := maxLen - len(ellipsis)
 	front := remaining / 2
 	back := remaining - front
-	return s[:front] + ellipsis + s[len(s)-back:]
+	return string(runes[:front]) + string(ellipsis) + string(runes[len(runes)-back:])
 }

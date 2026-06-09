@@ -95,7 +95,16 @@ func (m model) homeLines(width int) []string {
 		}
 		lines = append(lines, pathLine+strings.Repeat(" ", avail)+hints)
 		if m.typingPath {
-			lines = append(lines, "  "+accentStyle.Render("Go to: ")+valueStyle.Render(m.pathInput)+accentStyle.Render("█"))
+			p := m.pathInput
+			c := m.pathCursor
+			before := p[:c]
+			at := "_"
+			if c < len(p) {
+				at = p[c:c+1]
+			}
+			after := p[c+1:]
+			lines = append(lines, "  "+accentStyle.Render("Go to: ")+
+				valueStyle.Render(before)+cursorStyle.Render(at)+valueStyle.Render(after))
 		}
 		lines = append(lines, "")
 
