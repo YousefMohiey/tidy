@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="installer/tidy-banner.png" alt="tidy banner" width="800">
+<img src="installer/tidy-banner.svg" alt="tidy banner" width="800">
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
