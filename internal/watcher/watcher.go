@@ -144,7 +144,7 @@ func (w *Watcher) flushReady(now time.Time, pending map[string]time.Time) {
 		return
 	}
 
-	w.runOrganize()
+	go w.runOrganize()
 }
 
 // runOrganize calls the organizer on the watched directory and logs results.

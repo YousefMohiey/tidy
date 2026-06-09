@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -40,7 +42,33 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: file %q contains no rules", path)
 	}
 
+	for i, rule := range cfg.Rules {
+		if err := validateDestination(rule.Destination); err != nil {
+			return nil, fmt.Errorf("config: rule %d (%q): %w", i, rule.Name, err)
+		}
+		if rule.Name == "" {
+			return nil, fmt.Errorf("config: rule %d has empty name", i)
+		}
+	}
+
 	return &cfg, nil
+}
+
+func validateDestination(dest string) error {
+	if dest == "" {
+		return fmt.Errorf("destination must not be empty")
+	}
+	if filepath.IsAbs(dest) {
+		return fmt.Errorf("destination %q must be relative, not absolute", dest)
+	}
+	cleaned := filepath.Clean(dest)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("destination %q contains path traversal", dest)
+	}
+	if strings.Contains(cleaned, string(filepath.Separator)+".."+string(filepath.Separator)) {
+		return fmt.Errorf("destination %q contains path traversal", dest)
+	}
+	return nil
 }
 
 // Default returns a hardcoded Config with sensible default rules.

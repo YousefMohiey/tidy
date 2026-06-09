@@ -67,7 +67,7 @@ func (c *HashCache) Save() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if err := os.MkdirAll(filepath.Dir(c.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(c.path), 0o700); err != nil {
 		return err
 	}
 
@@ -81,7 +81,7 @@ func (c *HashCache) Save() error {
 		return err
 	}
 
-	return os.WriteFile(c.path, data, 0o644)
+	return os.WriteFile(c.path, data, 0o600)
 }
 
 // Get returns a cached hash if the file is unchanged (same size + modtime).
@@ -94,8 +94,8 @@ func (c *HashCache) Get(path string) (string, bool) {
 		return "", false
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 {
 		return "", false
 	}
 

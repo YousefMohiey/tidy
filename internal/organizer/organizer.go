@@ -95,7 +95,6 @@ func (o *Organizer) Organize(dir string) (*Result, error) {
 	var candidates []fileCandidate
 
 	journalDirAbs, _ := filepath.Abs(o.options.JournalDir)
-	targetDirAbs, _ := filepath.Abs(dir)
 
 	for _, entry := range entries {
 		name := entry.Name()
@@ -112,14 +111,19 @@ func (o *Organizer) Organize(dir string) (*Result, error) {
 
 		srcPath := filepath.Join(dir, name)
 
-		if info, err := os.Lstat(srcPath); err == nil {
-			if info.Mode()&os.ModeSymlink != 0 {
-				continue
-			}
+		info, err := os.Lstat(srcPath)
+		if err != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			continue
 		}
 
 		srcAbs, _ := filepath.Abs(srcPath)
-		if srcAbs == journalDirAbs && strings.HasPrefix(journalDirAbs, targetDirAbs) {
+		if strings.HasPrefix(srcAbs, journalDirAbs+string(filepath.Separator)) {
 			continue
 		}
 
@@ -348,7 +352,7 @@ func backupJournal(journalPath string) error {
 	}
 
 	backupDir := filepath.Join(filepath.Dir(journalPath), "journal-backups")
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		return err
 	}
 
@@ -360,5 +364,5 @@ func backupJournal(journalPath string) error {
 		return err
 	}
 
-	return os.WriteFile(backupPath, data, 0o644)
+	return os.WriteFile(backupPath, data, 0o600)
 }

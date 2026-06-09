@@ -47,7 +47,7 @@ func (j *Journal) Record(src, dst string, category string, size int64) {
 // Save writes the journal to a JSON file at the given path.
 func (j *Journal) Save(path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("journal: failed to create directory %q: %w", dir, err)
 	}
 
@@ -56,8 +56,13 @@ func (j *Journal) Save(path string) error {
 		return fmt.Errorf("journal: failed to marshal operations: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("journal: failed to write file %q: %w", path, err)
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
+		return fmt.Errorf("journal: failed to write file %q: %w", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("journal: failed to commit file %q: %w", path, err)
 	}
 
 	return nil
@@ -102,6 +107,11 @@ func (j *Journal) Undo() (int, error) {
 	for i := len(j.Operations) - 1; i >= 0; i-- {
 		op := j.Operations[i]
 
+		if !filepath.IsAbs(op.Destination) || !filepath.IsAbs(op.Source) {
+			errs = append(errs, fmt.Errorf("undo: non-absolute path in journal operation"))
+			continue
+		}
+
 		if _, err := os.Lstat(op.Destination); err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -115,7 +125,7 @@ func (j *Journal) Undo() (int, error) {
 		}
 
 		srcDir := filepath.Dir(op.Source)
-		if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		if err := os.MkdirAll(srcDir, 0o700); err != nil {
 			errs = append(errs, fmt.Errorf("undo: mkdir %q: %w", srcDir, err))
 			continue
 		}
