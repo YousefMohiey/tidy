@@ -161,7 +161,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.data.DedupScan = msg.result
 			m.activeTab = 2
 			m.scrollY = 0
-			m.status = fmt.Sprintf("Scan complete: %d duplicates, %d cache hits", len(msg.result.DuplicateGroups), msg.result.CacheHits)
+			if msg.freedBytes > 0 {
+				m.status = fmt.Sprintf("Freed %s — %d duplicate groups", dedup.FormatSize(msg.freedBytes), len(msg.result.DuplicateGroups))
+			} else {
+				m.status = fmt.Sprintf("Scan complete: %d duplicates, %d cache hits", len(msg.result.DuplicateGroups), msg.result.CacheHits)
+			}
 			m.statusStyle = successStyle
 		}
 		return m, nil

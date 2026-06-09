@@ -86,6 +86,7 @@ func (m model) handleBrowseKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "esc":
 		m.browsingDir = false
+		m.treePreview = nil
 		return m, nil
 	}
 	return m, nil
@@ -100,6 +101,9 @@ func (m model) handlePathInputKey(key string) (tea.Model, tea.Cmd) {
 			m.browseEntries = loadBrowseEntries(m.browsePath)
 			m.browseSelected = 0
 			m.browseScroll = 0
+		} else {
+			m.status = "Invalid path: " + cleanPath
+			m.statusStyle = errorStyle
 		}
 		m.typingPath = false
 		m.pathInput = ""

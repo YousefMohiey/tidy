@@ -100,9 +100,12 @@ func (m model) homeLines(width int) []string {
 			before := p[:c]
 			at := "_"
 			if c < len(p) {
-				at = p[c:c+1]
+				at = p[c : c+1]
 			}
-			after := p[c+1:]
+			after := ""
+			if c+1 <= len(p) {
+				after = p[c+1:]
+			}
 			lines = append(lines, "  "+accentStyle.Render("Go to: ")+
 				valueStyle.Render(before)+cursorStyle.Render(at)+valueStyle.Render(after))
 		}

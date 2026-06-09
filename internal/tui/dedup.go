@@ -11,8 +11,9 @@ import (
 )
 
 type dedupResultMsg struct {
-	result *dedup.ScanResult
-	err    error
+	result     *dedup.ScanResult
+	freedBytes int64
+	err        error
 }
 
 type dedupProgressMsg struct {
@@ -78,7 +79,7 @@ func (m model) runDupDelete() (tea.Model, tea.Cmd) {
 		if err != nil {
 			return dedupResultMsg{result: scan, err: err}
 		}
-		return dedupResultMsg{result: scan, err: fmt.Errorf("freed %s", dedup.FormatSize(freed))}
+		return dedupResultMsg{result: scan, freedBytes: freed}
 	}
 }
 
@@ -96,7 +97,7 @@ func (m model) runDupKeep() (tea.Model, tea.Cmd) {
 		if err != nil {
 			return dedupResultMsg{result: scan, err: err}
 		}
-		return dedupResultMsg{result: scan, err: fmt.Errorf("freed %s", dedup.FormatSize(freed))}
+		return dedupResultMsg{result: scan, freedBytes: freed}
 	}
 }
 
