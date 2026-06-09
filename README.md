@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="installer/tidy.png" alt="tidy" width="128" height="128">
+
 # tidy
 
 **Smart file organizer for your terminal**
@@ -17,96 +19,89 @@
 
 ---
 
-## Features
-
-| | |
-|---|---|
-| **Content-aware sorting** | Reads file magic bytes, not just extensions. A `.dat` that's actually a PNG goes to `Images/` |
-| **Interactive TUI dashboard** | Full control center — organize, preview, dedup, undo, and watch from one screen |
-| **Folder browser** | Navigate your filesystem visually to pick directories |
-| **Preview mode** | See exactly what will move before touching anything |
-| **Full undo** | Every operation is journaled. One key to reverse it all |
-| **Duplicate detection** | SHA256 content hashing with size-first optimization |
-| **Watch mode** | Auto-organize new files as they appear in a directory |
-| **11 file categories** | Images, Documents, Videos, Audio, Archives, Code, Fonts, Executables, Disk Images, Ebooks, 3D Models |
-| **300+ file types** | Covers everything from `.jpg` to `.heic`, `.stl` to `.epub` |
-| **Cross-platform** | Linux, Windows, macOS — single binary, no dependencies |
-| **Conflict resolution** | Smart renaming (`photo.jpg` → `photo_1.jpg`) when names collide |
-| **YAML config** | Customize rules, add your own categories |
-
 ## Installation
 
-### Download a release
+### Linux
 
-Grab the latest binary from [Releases](https://github.com/YousefMohiey/tidy/releases):
-
-| Platform | File |
-|---|---|
-| Linux (x86_64) | `tidy-linux-amd64` |
-| Windows (x86_64) | `tidy-windows-amd64.exe` |
-| macOS (Intel) | `tidy-darwin-amd64` |
-| macOS (Apple Silicon) | `tidy-darwin-arm64` |
-
+#### Debian / Ubuntu (.deb)
 ```bash
-# Linux
-chmod +x tidy-linux-amd64
-sudo mv tidy-linux-amd64 /usr/local/bin/tidy
-
-# macOS (pick your architecture)
-chmod +x tidy-darwin-arm64
-sudo mv tidy-darwin-arm64 /usr/local/bin/tidy
-
-# Windows
-# Rename tidy-windows-amd64.exe to tidy.exe and put it in your PATH
+wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy_amd64.deb
+sudo dpkg -i tidy_amd64.deb
 ```
 
-### Build from source
+#### Fedora / RHEL (.rpm)
+```bash
+wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy.x86_64.rpm
+sudo rpm -i tidy.x86_64.rpm
+```
 
-Requires [Go 1.22+](https://go.dev/dl/).
+#### Portable binary
+```bash
+wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-Linux-amd64
+chmod +x tidy-Linux-amd64
+sudo mv tidy-Linux-amd64 /usr/local/bin/tidy
+```
+
+### macOS
+
+```bash
+# Intel Mac
+curl -L https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-macOS-Intel -o tidy
+chmod +x tidy && sudo mv tidy /usr/local/bin/
+
+# Apple Silicon
+curl -L https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-macOS-Apple-Silicon -o tidy
+chmod +x tidy && sudo mv tidy /usr/local/bin/
+```
+
+### Windows
+
+Download `tidy-Setup-x.x.x.exe` from [Releases](https://github.com/YousefMohiey/tidy/releases).  
+Installs to `%LOCALAPPDATA%\Programs\tidy`, adds to PATH, creates Start Menu and Desktop shortcuts.  
+User-scope only — no admin required.
+
+### Build from source
 
 ```bash
 git clone https://github.com/YousefMohiey/tidy.git
 cd tidy
 go build -o tidy ./cmd/tidy/
+sudo mv tidy /usr/local/bin/
 ```
 
-### Quick install (Linux)
+---
 
-```bash
-git clone https://github.com/YousefMohiey/tidy.git && cd tidy
-./install.sh
-```
+## Features
+
+| | |
+|---|---|
+| **Content-aware sorting** | Reads file magic bytes, not just extensions |
+| **Interactive TUI dashboard** | Organize, preview, dedup, undo, and watch from one screen |
+| **Folder browser** | Navigate visually or type/paste paths directly (`g` key) |
+| **Preview mode** | See exactly what will move before touching anything |
+| **Full undo** | Journaled with atomic crash-safe saves — undo any batch |
+| **Undo history** | Browse and undo from past operations |
+| **Duplicate detection** | SHA256 hashing with speed-optimized cache |
+| **Duplicate resolver** | Select which copies to keep/delete with freed-space report |
+| **Watch mode** | Auto-organize new files in real-time |
+| **Tree preview** | Visualize file categorization before organizing |
+| **Progress reporting** | Live counts during organize and dedup |
+| **11 categories** | Images, Documents, Videos, Audio, Archives, Code, Fonts, Executables, Disk Images, Ebooks, 3D Models |
+| **300+ file types** | `.jpg` to `.heic`, `.stl` to `.epub` |
+| **Cross-platform** | Linux, Windows, macOS — single binary, no deps |
+| **Smart renaming** | `photo.jpg` → `photo_1.jpg` on name collisions |
+| **YAML config** | Customize rules and categories |
+| **Windows context menu** | Right-click any folder → Organize with tidy |
+| **ANSI colors** | Full color on all terminals including Windows CMD |
+
+---
 
 ## Usage
 
-### Interactive dashboard (recommended)
+### Interactive dashboard
 
 ```bash
 tidy
-```
-
-Just run `tidy` with no arguments. The interactive dashboard opens:
-
-```
-╭─────────────────────────────────────────────────╮
-│  tidy dashboard              [1] [2] [3] [4]    │
-├─────────────────────────────────────────────────┤
-│                                                 │
-│  Directory: /home/user/Downloads    [e]: browse │
-│  Last organized: 2026-05-24 12:30               │
-│  Operations: 8                                  │
-│                                                 │
-│  ┌─ Actions ──────────────────────────────────┐ │
-│  │ > Organize files              [o]          │ │
-│  │   Preview (dry-run)           [p]          │ │
-│  │   Scan for duplicates         [d]          │ │
-│  │   Undo last operation         [u]          │ │
-│  │   Toggle watch mode           [w]          │ │
-│  └────────────────────────────────────────────┘ │
-│                                                 │
-│  Status: Ready                                  │
-╰─────────────────────────────────────────────────╯
-  1-4: tabs  enter: select  e: browse dir  q: quit
 ```
 
 **Keyboard shortcuts:**
@@ -115,165 +110,79 @@ Just run `tidy` with no arguments. The interactive dashboard opens:
 |---|---|
 | `e` | Browse and select directory |
 | `o` | Organize files |
-| `p` | Preview (dry-run) — see what would happen |
+| `p` | Preview (dry-run) |
 | `d` | Scan for duplicates |
-| `u` | Undo last operation (with confirmation) |
+| `u` | Undo (with confirmation) |
 | `w` | Toggle watch mode |
+| `g` | Type/paste a path directly |
+| `s` | Select current directory |
+| `← →` | Move cursor in path input |
+| `Backspace` | Go to parent directory |
 | `1-4` | Switch tabs |
-| `j/k` | Navigate / scroll |
+| `j/k` or `↑/↓` | Navigate / scroll |
 | `q` | Quit |
 
-### Command line
+### CLI
 
 ```bash
-# Organize a directory
-tidy organize ~/Downloads
-
-# Preview without moving anything
-tidy organize ~/Downloads --dry-run
-
-# Auto-organize new files in real-time
-tidy watch ~/Downloads
-
-# Undo the last operation
-tidy undo
-
-# Find duplicate files
-tidy dedup ~/Downloads
-
-# Find duplicates across multiple directories
-tidy dedup ~/Downloads ~/Documents ~/Pictures
-
-# Output duplicates as JSON
-tidy dedup ~/Downloads --json
-
-# Show last operation details
-tidy status
-
-# Use a custom config
-tidy organize ~/Downloads --config my-rules.yaml
+tidy organize ~/Downloads          # Organize files
+tidy organize --dry-run ~/Downloads # Preview only
+tidy watch ~/Downloads             # Watch + auto-organize
+tidy undo                          # Undo last operation
+tidy dedup ~/Downloads             # Find duplicates
+tidy dedup ~/Downloads --json      # JSON output
+tidy status                        # Last operation summary
+tidy organize ~/Downloads --config rules.yaml  # Custom rules
 ```
 
-## Configuration
+---
 
-`tidy` works out of the box with sensible defaults. To customize, create a `config.yaml`:
+## Configuration
 
 ```yaml
 rules:
   - name: Images
-    extensions:
-      - jpg
-      - png
-      - gif
-      - webp
-      - heic
-    magic_bytes:
-      - image/jpeg
-      - image/png
+    extensions: [jpg, png, gif, webp, heic]
+    magic_bytes: [image/jpeg, image/png]
     destination: Images
     patterns: []
 
-  - name: My Custom Category
-    extensions:
-      - custom
-      - special
+  - name: Custom
+    extensions: [custom, special]
     magic_bytes: []
     destination: Custom
-    patterns:
-      - "*.backup"
+    patterns: ["*.backup"]
 ```
 
-Then use it:
+> Destinations are validated for path traversal safety (`../../etc` is rejected).
 
-```bash
-tidy organize ~/Downloads --config config.yaml
-```
-
-### Default categories
-
-| Category | Example extensions |
-|---|---|
-| **Images** | jpg, png, gif, svg, webp, heic, avif, psd, raw, cr2, nef |
-| **Documents** | pdf, doc, docx, txt, md, xlsx, pptx, tex, pages, keynote |
-| **Videos** | mp4, avi, mkv, mov, webm, m4v, mpg, 3gp, vob |
-| **Audio** | mp3, wav, flac, aac, ogg, aiff, opus, midi |
-| **Archives** | zip, tar, gz, 7z, rar, bz2, xz, zst, cab, jar, dmg |
-| **Code** | py, js, ts, go, rs, c, cpp, java, rb, php, sh, sql, lua, swift, kt, and 50+ more |
-| **Fonts** | ttf, otf, woff, woff2, eot |
-| **Executables** | exe, msi, deb, rpm, apk, appimage |
-| **Disk Images** | iso, img, vmdk, vdi, vhd, qcow2 |
-| **Ebooks** | epub, mobi, azw, djvu, fb2 |
-| **3D Models** | stl, obj, fbx, blend, gltf, glb, step |
+---
 
 ## Architecture
 
 ```
 tidy/
-├── cmd/tidy/main.go              # CLI entry point (cobra)
+├── cmd/tidy/          # CLI entry + Windows color support
 ├── internal/
-│   ├── config/config.go          # YAML config + defaults
-│   ├── rules/rules.go            # 3-phase matching: ext → MIME → glob
-│   ├── detector/detector.go      # Magic bytes via mimetype lib
-│   ├── organizer/
-│   │   ├── organizer.go          # File moves + conflict resolution
-│   │   └── journal.go            # JSON journal + undo
-│   ├── watcher/watcher.go        # fsnotify + debounce (500ms)
-│   ├── dedup/dedup.go            # SHA256 dedup (size-first optimization)
-│   ├── paths/paths.go            # Platform-specific data directories
-│   └── tui/dashboard.go          # Bubble Tea interactive dashboard
-├── config.yaml                   # Default rules
-└── build.sh                      # Cross-platform build script
+│   ├── config/        # YAML config + path validation
+│   ├── rules/         # 3-phase matching engine
+│   ├── detector/      # MIME detection via magic bytes
+│   ├── organizer/     # File moves + atomic journal/undo
+│   ├── watcher/       # fsnotify watcher (async organize)
+│   ├── dedup/         # SHA256 dedup + persistent cache
+│   ├── paths/         # Platform data directories
+│   ├── notify/        # Desktop notifications
+│   └── tui/           # 9 Bubble Tea TUI modules
+├── installer/         # NSIS, RPM, DEB packaging
+├── build.sh           # Cross-platform build
+└── config.yaml        # Default rules
 ```
-
-### How detection works
-
-```
-File in Downloads/
-    │
-    ▼
-Detector reads magic bytes → "image/jpeg"
-    │
-    ▼
-Rule Engine matches (3 phases):
-  1. Extension match (fastest)
-  2. MIME type match
-  3. Glob pattern match
-    │
-    ▼
-Organizer creates Images/ dir
-    │
-    ▼
-Conflict check → Images/photo.jpg
-    │
-    ▼
-os.Rename(source, destination)
-    │
-    ▼
-Journal records {source, destination, timestamp}
-```
-
-## Data locations
-
-| Platform | Path |
-|---|---|
-| Linux | `~/.local/share/tidy/journal.json` |
-| Windows | `%LOCALAPPDATA%\tidy\journal.json` |
-| macOS | `~/Library/Application Support/tidy/journal.json` |
 
 ## Building
 
 ```bash
-# Build for current platform
-go build -o tidy ./cmd/tidy/
-
-# Build all platforms
 ./build.sh
-
-# Output in dist/
-#   tidy-linux-amd64        (4.5 MB)
-#   tidy-windows-amd64.exe  (4.8 MB)
-#   tidy-darwin-amd64       (4.6 MB, Intel)
-#   tidy-darwin-arm64       (4.3 MB, Apple Silicon)
+# Output: tidy-Linux-amd64, .deb, .rpm, Windows .exe, macOS binaries
 ```
 
 ## License

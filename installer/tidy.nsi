@@ -35,8 +35,8 @@ ShowUnInstDetails nevershow
 
 ; --- ModernUI 2 configuration ---
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "tidy.ico"
+!define MUI_UNICON "tidy.ico"
 
 ; Installer pages
 !insertmacro MUI_PAGE_WELCOME

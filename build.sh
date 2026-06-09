@@ -56,6 +56,19 @@ echo "  ✓ tidy-macOS-Apple-Silicon"
 
 ./self-sign.sh "$OUTDIR/tidy-Windows-amd64.exe" "$OUTDIR/tidy-Setup-$VERSION.exe"
 
+if command -v rpmbuild &>/dev/null; then
+    CLEAN_VER="${VERSION#v}"
+    CLEAN_VER="${CLEAN_VER%-dirty}"
+    [ -z "$CLEAN_VER" ] && CLEAN_VER="1.1.0"
+    installer/build-rpm.sh "$OUTDIR/tidy-Linux-amd64" "$CLEAN_VER"
+fi
+if command -v dpkg-deb &>/dev/null; then
+    CLEAN_VER="${VERSION#v}"
+    CLEAN_VER="${CLEAN_VER%-dirty}"
+    [ -z "$CLEAN_VER" ] && CLEAN_VER="1.1.0"
+    installer/build-deb.sh "$OUTDIR/tidy-Linux-amd64" "$CLEAN_VER"
+fi
+
 echo ""
 echo "All binaries built in $OUTDIR/"
 ls -lh "$OUTDIR/"
