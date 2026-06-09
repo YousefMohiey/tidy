@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Tidy
-Comment=Smart file organizer
-Exec=tidy
-Icon=tidy
-Terminal=true
-Type=Application
-Categories=Utility;FileManager;

@@ -34,3 +34,4 @@ installer/tidy-macos-*
 
 # Release notes (generated)
 RELEASE_v*.md
+pkg/
