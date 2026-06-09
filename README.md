@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="installer/tidy.png" alt="tidy" width="128" height="128">
+<img src="installer/tidy.svg" alt="tidy" width="128" height="128">
 
 # tidy
 
