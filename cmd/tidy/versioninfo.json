@@ -1,14 +1,14 @@
 {
   "FixedFileInfo": {
     "FileVersion": {
-      "Major": 0,
-      "Minor": 0,
+      "Major": 1,
+      "Minor": 2,
       "Patch": 0,
       "Build": 0
     },
     "ProductVersion": {
-      "Major": 0,
-      "Minor": 0,
+      "Major": 1,
+      "Minor": 2,
       "Patch": 0,
       "Build": 0
     },
@@ -22,14 +22,14 @@
     "Comments": "",
     "CompanyName": "YousefMohiey",
     "FileDescription": "Smart file organizer",
-    "FileVersion": "1c82849-dirty",
+    "FileVersion": "1.2.0",
     "InternalName": "tidy",
     "LegalCopyright": "Copyright (c) YousefMohiey",
     "LegalTrademarks": "",
     "OriginalFilename": "tidy.exe",
     "PrivateBuild": "",
     "ProductName": "tidy",
-    "ProductVersion": "1c82849-dirty",
+    "ProductVersion": "1.2.0",
     "SpecialBuild": ""
   },
   "VarFileInfo": {

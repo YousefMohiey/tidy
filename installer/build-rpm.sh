@@ -2,25 +2,22 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BINARY="${1:-$PROJECT_ROOT/dist/tidy-Linux-amd64}"
-VERSION="${2:-1.1.0}"
-SPEC="$SCRIPT_DIR/tidy.spec"
+VERSION="${1:-1.2.0}"
 
-if ! command -v rpmbuild &>/dev/null; then
-    echo "rpmbuild not found. Use: sudo dnf install rpm-build"
-    exit 1
-fi
+rm -rf /tmp/tidy-rpm
+mkdir -p /tmp/tidy-rpm/{SOURCES,SPECS}
+cp "$PROJECT_ROOT/dist/tidy-linux-amd64" /tmp/tidy-rpm/SOURCES/tidy-Linux-amd64
+cp "$SCRIPT_DIR/tidy.png" /tmp/tidy-rpm/SOURCES/tidy.png
+cp "$SCRIPT_DIR/tidy.spec" /tmp/tidy-rpm/SPECS/tidy.spec
+sed -i "s/Version:.*/Version:        $VERSION/" /tmp/tidy-rpm/SPECS/tidy.spec
+sed -i "s|Source0:.*|Source0:        tidy-Linux-amd64|" /tmp/tidy-rpm/SPECS/tidy.spec
 
-RPM_TOPDIR="$(mktemp -d)"
-mkdir -p "$RPM_TOPDIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-cp "$BINARY" "$RPM_TOPDIR/SOURCES/tidy-Linux-amd64"
-cp "$SCRIPT_DIR/tidy.png" "$RPM_TOPDIR/SOURCES/tidy.png"
-sed "s/Version:.*/Version:        $VERSION/" "$SPEC" > "$RPM_TOPDIR/SPECS/tidy.spec"
+podman run --rm \
+    -v /tmp/tidy-rpm:/root/rpmbuild:z \
+    -v "$PROJECT_ROOT/dist:/out:z" \
+    docker.io/library/fedora:latest \
+    bash -c 'dnf install -y rpm-build > /dev/null 2>&1 && rpmbuild -bb --define "_topdir /root/rpmbuild" /root/rpmbuild/SPECS/tidy.spec && cp /root/rpmbuild/RPMS/x86_64/tidy-*.rpm /out/tidy-'"$VERSION"'-1.x86_64.rpm' 2>/dev/null
 
-rpmbuild -bb --define "_topdir $RPM_TOPDIR" "$RPM_TOPDIR/SPECS/tidy.spec"
-RPM_FILE=$(find "$RPM_TOPDIR/RPMS" -name "tidy-*.rpm" | head -1)
-if [ -f "$RPM_FILE" ]; then
-    cp "$RPM_FILE" "$PROJECT_ROOT/dist/"
-    echo "  ✓ $(basename "$RPM_FILE")"
-fi
-rm -rf "$RPM_TOPDIR"
+RPM="$PROJECT_ROOT/dist/tidy-${VERSION}-1.x86_64.rpm"
+[ -f "$RPM" ] && echo "  ✓ tidy-${VERSION}-1.x86_64.rpm" || echo "  ✗ RPM build failed"
+rm -rf /tmp/tidy-rpm

@@ -25,32 +25,32 @@
 
 #### Debian / Ubuntu (.deb)
 ```bash
-wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy_amd64.deb
-sudo dpkg -i tidy_amd64.deb
+wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-1.2.0-amd64.deb
+sudo dpkg -i tidy-1.2.0-amd64.deb
 ```
 
 #### Fedora / RHEL (.rpm)
 ```bash
-wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy.x86_64.rpm
-sudo rpm -i tidy.x86_64.rpm
+wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-1.2.0-1.x86_64.rpm
+sudo rpm -i tidy-1.2.0-1.x86_64.rpm
 ```
 
 #### Portable binary
 ```bash
-wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-Linux-amd64
-chmod +x tidy-Linux-amd64
-sudo mv tidy-Linux-amd64 /usr/local/bin/tidy
+wget https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-linux-amd64
+chmod +x tidy-linux-amd64
+sudo mv tidy-linux-amd64 /usr/local/bin/tidy
 ```
 
 ### macOS
 
 ```bash
 # Intel Mac
-curl -L https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-macOS-Intel -o tidy
+curl -L https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-macos-intel -o tidy
 chmod +x tidy && sudo mv tidy /usr/local/bin/
 
 # Apple Silicon
-curl -L https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-macOS-Apple-Silicon -o tidy
+curl -L https://github.com/YousefMohiey/tidy/releases/latest/download/tidy-macos-arm64 -o tidy
 chmod +x tidy && sudo mv tidy /usr/local/bin/
 ```
 
