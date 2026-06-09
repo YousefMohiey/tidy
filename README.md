@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="installer/tidy-banner.svg?v=3" alt="tidy banner" width="800">
+<img src="installer/tidy-banner.svg?v=4" alt="tidy banner" width="800">
 
 <br/>
 
